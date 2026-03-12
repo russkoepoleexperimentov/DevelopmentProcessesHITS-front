@@ -1,0 +1,4069 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+4. Repository files, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+<additional_info>
+
+</additional_info>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+api-specs.md
+index.html
+package.json
+src/App.tsx
+src/index.css
+src/main.tsx
+src/pages/__tests__/CoursePage.test.tsx
+src/pages/__tests__/DashboardPage.test.tsx
+src/pages/AuthPage.jsx
+src/pages/CoursePage.jsx
+src/pages/DashboardPage.jsx
+src/pages/MembersPage.jsx
+src/pages/PostFormPage.jsx
+src/pages/PostPage.jsx
+src/pages/ProfilePage.jsx
+src/pages/SolutionsPage.jsx
+src/shared/api/client.js
+src/shared/api/endpoints.js
+src/shared/lib/__tests__/authContext.test.tsx
+src/shared/lib/authContext.jsx
+src/test/setup.ts
+tsconfig.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="api-specs.md">
+# Спецификация API для системы обучения
+
+# Структура ответа сервера
+
+```json
+{
+    type: "string" // "success" | "error" - тип ответа (успех/ошибка)
+    message: "string" // Строка сообщения (для отображения на UI) или null
+    data: { ... } // данные ответа
+}
+```
+
+Далее, под **ответом** понимается значение поле **data** в этой структуре. Например, при получении информации о себе (get)`/user`, в случае успеха, сервер пришлёт:
+
+```json
+{
+    type: "success",
+    message: null,
+    data: {
+      credentials: "foo",
+      email: "example@mail.ru",
+      id: "xxxxxxxxxxxxxxxxxxx"
+    }
+}
+```
+
+# Описание эндпоинтов
+
+Символом `*` отмечены эндпоинты, для которых требуется авторизация (заголовок authorization). В системе используются JSON Web Token'ы (JWT)
+
+В некоторых запросах есть пагинация формата skip-take (значения передаются через query-параметры).
+
+* `skip` число от 0 до бесконечности - сколько записей пропустить
+
+* `take` число от 1 до бесконечности - сколько записей взять после пропуска
+
+* В ответе гарантированно будет: 
+  
+  * `records: [...]` - список записей по запросу (их количество не превышает значение take)
+  
+  * `totalRecords: int`- общее число записей в БД
+
+# Регистрация и авторизация
+
+## Регистрация `/auth/register` [post]
+
+### Тело
+
+```json
+{
+  credentials: "string",
+  email: "string",
+  password: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+  accessToken: "string",
+  refreshToken: "string"
+}
+```
+
+## Вход `/auth/login` [post]
+
+### Тело
+
+```json
+{
+  email: "string",
+  password: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+  accessToken: "string",
+  refreshToken: "string"
+}
+```
+
+## [NEW] Выход* `/auth/logout` [post]
+
+## Обновление токена* `/auth/refresh` [post]
+
+### Ответ
+
+```json
+{
+  accessToken: "string",
+  refreshToken: "string"
+}
+```
+
+# Пользователь
+
+## [UPDATED] Получить данные о себе* `/users` [get]
+
+### Ответ
+
+```json
+{
+  credentials: "string",
+  email: "string",
+  id: "guid-string"
+}
+```
+
+## [NEW] Получить данные о пользователе* `/users/{id}` [get]
+
+### Ответ
+
+```json
+{
+  credentials: "string",
+  email: "string",
+  id: "guid-string"
+}
+```
+
+## [UPDATED] Обновить данные о себе* `/users` [put]
+
+### Тело
+
+```json
+{
+  credentials: "string"
+  email: "string"
+}
+```
+
+# Курс
+
+## [UPDATED] Создать курс* `/course` [post]
+
+### Тело
+
+```json
+{
+  title: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+   id: "guid-string",
+   "title": "string"
+}
+```
+
+## [NEW] Получить список курсов* /user/courses [get]
+
+Возвращает все курсы, в которых состоит авторизованный пользователь, с указанием его роли в каждом курсе.
+
+### Ответ
+
+```json
+{
+  "records": [
+    {
+      "id": "guid-string",          // идентификатор курса
+      "title": "string",            // название курса
+      "role": "teacher" | "student" // роль пользователя в этом курсе
+    },
+    ...
+  ]
+}
+```
+
+## Изменить курс* `/course/{id}` [put]
+
+Доступно только преподавателям
+
+### Тело
+
+```json
+{
+  title: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+   id: "guid-string",
+   title: "string"
+}
+```
+
+## [UPDATED] Получить информацию о курсе* `/course/{id}` [get]
+
+### Ответ
+
+```json
+{
+   id: "guid-string",
+   title: "string",
+   role: "string", // роль авторизованного пользователя "teacher" | "student"
+   authorId: "guid-string", // id создателя курса
+   inviteCode: "string" // код приглашения в курс
+}
+```
+
+## Получить посты курса* `/course/{id}/feed?skip={skip}&take={take}` [get]
+
+### Ответ
+
+```json
+{
+   records: [
+    {
+        id: "guid-string", // id поста
+        type: "string", // "post" | "task"
+        title: "string",
+        createdDate: "datetime-iso-string",
+    },
+    ...
+    ],
+    totalRecords: int
+}
+```
+
+## [UPDATED] Получить список участников курса* `/course/{id}/members?skip={skip}&take={take}&query={searchQuery}` [get]
+
+Доступно только преподавателям курса.
+
+### Ответ
+
+```json
+{
+  records: [
+    {
+      id: "guid-string",
+      credentials: "string",
+      email: "string",
+      role: "teacher" | "student"
+    },
+    ...
+  ],
+  totalRecords: int
+}```
+```
+
+## Изменить роль участника* `/course/{id}/members/{userId}/role` [put]
+
+Доступно только преподавателям курса. Преподаватель может повысить студента до 
+преподавателя или понизить другого преподавателя до студента. Нельзя 
+изменить роль самому себе.
+
+### Тело
+
+```json
+{
+  role: "teacher" | "student"
+}
+```
+
+### Ответ
+
+```json
+{
+  id: "guid-string", // user id
+  role: "teacher" | "student"
+}
+```
+
+## Удалить участника из курса* `/course/{id}/members/{userId}` [delete]
+
+Доступно только преподавателям курса. Удаляет пользователя из курса (запись CourseRole). Нельзя удалить самого себя и создателя курса.
+
+### Ответ
+
+```json
+{
+  id: "guid-string", // course id
+}
+```
+
+## [NEW] Покинуть курс* `/course/{id}/leave` [delete]
+
+Покидание курса. Нельзя выйти только создателю курса
+
+### Ответ
+
+```json
+{
+  id: "guid-string", // course id
+}
+```
+
+## Присоединиться к курсу по коду* `/course/join` [post]
+
+Позволяет пользователю стать учеником курса, указав код приглашения. Код 
+генерируется при создании курса автоматически. Посмотреть его можно, получив информацию о курсе.
+
+### Тело
+
+```json
+{
+  inviteCode: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+  id: "guid-string", // course id
+  title: "string",
+  role: "student"
+}
+```
+
+## Создать пост в курсе* `/course/{courseId}/task` [post]
+
+Доступно только преподавателям курса.
+
+### Тело
+
+```json
+{
+  type: "string", // "post" | "task"
+  title: "string",
+  text: "string",
+  deadline: "datetime-iso-string",      // опционально
+  maxScore: int,                         // по умолчанию 5
+  taskType: "mandatory" | "optional",    // обязательное/дополнительное
+  solvableAfterDeadline: bool,            // можно ли сдавать после дедлайна
+  files: ["guid-string", ...]  // опционально, ID ранее загруженных файлов
+}
+```
+
+### Ответ
+
+```json
+{
+  "id": "guid-string",
+}
+```
+
+# Посты
+
+## Получить пост* `/post/{id}` [get]
+
+### Ответ
+
+```json
+{
+  type: "string", // "post" | "task"
+  title: "string",
+  text: "string",
+
+  // may be not null only for tasks:
+  deadline: "datetime-iso-string" | null,      
+  maxScore: int | null,                         
+  taskType: "mandatory" | "optional" | null,    
+  solvableAfterDeadline: bool | null,            
+  files: [
+    {
+      id: "guid-string",
+      name: "string",
+    },
+  ]  // опционально, ID ранее загруженных файлов
+  userSolution: { ... } | null // решение пользователя
+}
+```
+
+## Редактировать пост* `/post/{id}` [put]
+
+Доступно только преподавателям курса.
+
+### Тело
+
+то же что и для создания поста
+
+### Ответ
+
+```json
+{
+  id: "guid-string",
+}
+```
+
+## Удалить пост* `/post/{id}` [delete]
+
+Доступно только преподавателям курса.
+
+### Ответ:
+
+```json
+{
+  id: "guid-string", // deleted post id
+}
+```
+
+# Решение к заданиям
+
+Далее под ID подразумевается id постов типа "задание", если не указано иное
+
+## Отправить решение* `/task/{id}/solution` [put]
+
+Только ученикам. Отправить или отредактировать существующее решение к заданию
+
+### Тело
+
+```json
+{
+  text: "string",                // комментарий к решению (опционально)
+  files: ["guid-string", ...]  // ID файлов решения (можно несколько)
+}
+```
+
+### Ответ
+
+```json
+{
+  id: "guid-string", // solved task id
+}
+```
+
+## Удалить решение* `/task/{id}/solution` [delete]
+
+Только ученикам. Удалить существующее решение к заданию
+
+### Ответ
+
+```json
+{
+  id: "guid-string", // task id
+}
+```
+
+## [UPDATED] Получить своё решение по заданию* `/task/{id}/solution` [get]
+
+Только ученикам. 
+
+### Ответ
+
+```json
+{
+  text: "string",                // комментарий к решению (опционально)
+  files: [
+    {
+      id: "guid-string",
+      name: "string",
+    },
+  ]  // ID файлов решения (можно несколько)
+  score: int | null,
+  status: "pending" | "checked" | "returned",
+  updatedDate": "datetime-iso-string"
+}
+```
+
+## [UPDATED] Получить список решений по заданию* `/task/{id}/solutions?skip={skip}&take={take}&status=pending|checked|returned&studentId=...` [get]
+
+Доступно только преподавателям курса. Фильтрация по статусу и конкретному ученику (опционально).
+
+### Ответ
+
+```json
+{
+  records: [
+    {
+      id: "guid-string", // id объекта решения (для следующего эндпоинта)
+      user: {
+        id: "guid-string",
+        credentials: "string"
+      },
+      text: "string",
+      score: int | null,
+      status: "pending" | "checked" | "returned",
+      files: [
+        {
+          id: "guid-string",
+          name: "string",
+        }
+      ],
+      updatedDate": "datetime-iso-string"
+    },
+    ...
+  ],
+  totalRecords: int
+}
+```
+
+## Проверить решение (выставить оценку, изменить статус)* `/solution/{solutionId}/review` [post]
+
+Доступно только преподавателям курса.
+
+### Тело
+
+```json
+{
+  score: int,                    // оценка (не более maxScore задания)
+  status: "checked" | "returned", // "checked" — принято, "returned" — отклонено
+  comment: "string"               // приватный комментарий к решению (опционально)
+}
+```
+
+### Ответ
+
+```json
+{
+    id: "guid-string", // solution id
+}
+```
+
+# Комментарии
+
+## Прокомментировать пост* `/post/{id}/comment` [post]
+
+Создает ПУБЛИЧНЫЙ комментарий к посту курса
+
+### Тело
+
+```json
+{
+  text: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+    id: "guid-string", // comment id
+}
+```
+
+## Прокомментировать решение* `/solution/{id}/comment` [post]
+
+Создает ПРИВАТНЫЙ комментарий к решению (ученик или преподаватель). Комментарии видит автор решения и преподаватели. Комментарий может создать только автор решения.
+
+### Тело
+
+```json
+{
+  text: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+    id: "guid-string", // comment id
+}
+```
+
+## Получить root-комментарии к посту* `/post/{id}/comment` [get]
+
+### Ответ
+
+```json
+[
+    {
+        id: "guid-string", // comment id
+        text: "string",
+        author: {
+            id: "guid-string",
+            credentials: "guid-string"
+        },
+        nestedCount: int // кол-во вложенных комментариев
+    },
+    ...
+]
+```
+
+## Получить root-комментарии к решению* `/solution/{id}/comment` [get]
+
+### Ответ такой же как выше
+
+## Получить ответы на комментарий* `/comment/{id}/replies`[get]
+
+Возвращает комментарии которые являются ответом на данный
+
+### Ответ такой же как выше
+
+## Ответить на комментарий* `/comment/{id}/reply`[post]
+
+### Тело
+
+```json
+{
+  text: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+    id: "guid-string", // comment id
+}
+```
+
+## Редактировать комментарий* `/comment/{id}`[put]
+
+### Тело
+
+```json
+{
+  text: "string"
+}
+```
+
+### Ответ
+
+```json
+{
+    id: "guid-string", // comment id
+}
+```
+
+## Удалить комментарий* `/comment/{id}`[delete]
+
+### Ответ
+
+```json
+{
+    id: "guid-string", // comment id
+}
+```
+
+# [NEW] Файлы
+
+## Загрузить* /files/upload [post]
+
+### Тело
+
+multipart/form-data
+файл передавать в поле "file"
+
+### Ответ
+
+```json
+{
+  "id": "guid-string"
+}
+```
+
+## Получить файл* /files/{id} [get]
+
+### Ответ
+
+В случае успеха сервер возвращает файл с соответствующим Content-Type. Тело ответа — бинарные данные файла.
+
+При ошибке доступа или отсутствии файла возвращается стандартный JSON-ответ с type: "error".
+
+- Важно: в случае успеха данный эндпоинт возвращает не JSON, а отдаёт файл напрямую.
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Classroom — Система обучения</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="src/App.tsx">
+// @ts-nocheck
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
+import { ConfigProvider, Layout, Typography, Dropdown, Avatar, Spin, theme } from 'antd';
+import { AuthProvider, useAuth } from './shared/lib/authContext';
+import { BookOutlined, UserOutlined, LogoutOutlined, HomeOutlined } from '@ant-design/icons';
+
+import AuthPage from './pages/AuthPage';
+import DashboardPage from './pages/DashboardPage';
+import CoursePage from './pages/CoursePage';
+import PostPage from './pages/PostPage';
+import PostFormPage from './pages/PostFormPage';
+import MembersPage from './pages/MembersPage';
+import SolutionsPage from './pages/SolutionsPage';
+import ProfilePage from './pages/ProfilePage';
+
+const { Header, Content } = Layout;
+const { Text } = Typography;
+
+function GuestRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>;
+  if (user) return <Navigate to="/" replace />;
+  return children;
+}
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>;
+  if (!user) return <Navigate to="/auth" replace />;
+  return children;
+}
+
+function AppHeader() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  if (!user) return null;
+
+  const menuItems = [
+    {
+      key: 'home',
+      icon: <HomeOutlined />,
+      label: 'Мои курсы',
+      onClick: () => navigate('/'),
+    },
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: 'Профиль',
+      onClick: () => navigate('/profile'),
+    },
+    { type: 'divider' },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: 'Выйти',
+      danger: true,
+      onClick: async () => {
+        await logout();
+        navigate('/auth');
+      },
+    },
+  ];
+
+  return (
+    <Header
+      style={{
+        background: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 24px',
+        borderBottom: '1px solid #f0f0f0',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 56,
+      }}
+    >
+      <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+        <BookOutlined style={{ fontSize: 24, color: '#1967d2' }} />
+        <Text strong style={{ fontSize: 18, color: '#1967d2' }}>Classroom</Text>
+      </Link>
+
+      <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={['click']}>
+        <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Avatar style={{ backgroundColor: '#1967d2' }} icon={<UserOutlined />} />
+          <Text style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {user.credentials}
+          </Text>
+        </div>
+      </Dropdown>
+    </Header>
+  );
+}
+
+function AppContent() {
+  return (
+    <Routes>
+      <Route path="/auth" element={<GuestRoute><AuthPage /></GuestRoute>} />
+      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/course/:id" element={<ProtectedRoute><CoursePage /></ProtectedRoute>} />
+      <Route path="/course/:courseId/new-post" element={<ProtectedRoute><PostFormPage /></ProtectedRoute>} />
+      <Route path="/course/:id/members" element={<ProtectedRoute><MembersPage /></ProtectedRoute>} />
+      <Route path="/post/:id" element={<ProtectedRoute><PostPage /></ProtectedRoute>} />
+      <Route path="/post/:postId/edit" element={<ProtectedRoute><PostFormPage /></ProtectedRoute>} />
+      <Route path="/post/:postId/solutions" element={<ProtectedRoute><SolutionsPage /></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: '#1967d2',
+          borderRadius: 8,
+          fontFamily:
+            "'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        },
+        algorithm: theme.defaultAlgorithm,
+      }}
+    >
+      <BrowserRouter>
+        <AuthProvider>
+          <Layout style={{ minHeight: '100vh', background: '#f8f9fa' }}>
+            <AppHeader />
+            <Content style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+              <AppContent />
+            </Content>
+          </Layout>
+        </AuthProvider>
+      </BrowserRouter>
+    </ConfigProvider>
+  );
+}
+</file>
+
+<file path="src/main.tsx">
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+</file>
+
+<file path="src/pages/__tests__/CoursePage.test.tsx">
+// src/pages/__tests__/CoursePage.test.tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from '../../shared/lib/authContext';
+import CoursePage from '../CoursePage';
+import { courseAPI, postAPI } from '../../shared/api/endpoints';
+import { vi } from 'vitest';
+
+vi.mock('../../shared/api/endpoints', () => ({
+  courseAPI: {
+    getById: vi.fn(),
+    getFeed: vi.fn(),
+    leave: vi.fn(),
+  },
+  postAPI: {},
+}));
+
+describe('CoursePage', () => {
+  beforeEach(() => {
+    (courseAPI.getById as any).mockResolvedValue({
+      id: '123',
+      title: 'Тестовый курс',
+      role: 'teacher',
+      authorId: 'user1',
+      inviteCode: 'ABC123',
+    });
+    (courseAPI.getFeed as any).mockResolvedValue({
+      records: [],
+      totalRecords: 0,
+    });
+  });
+
+  it('показывает кнопки преподавателя для пользователя с ролью teacher', async () => {
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/course/:id" element={<CoursePage />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>,
+      { route: '/course/123' }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Новый пост')).toBeInTheDocument();
+      expect(screen.getByText('Участники')).toBeInTheDocument();
+      expect(screen.getByText('Редактировать')).toBeInTheDocument();
+      // Кнопка "Покинуть курс" не должна отображаться для преподавателя-автора
+      expect(screen.queryByText('Покинуть')).not.toBeInTheDocument();
+    });
+  });
+
+  it('не показывает кнопки преподавателя для студента', async () => {
+    (courseAPI.getById as any).mockResolvedValueOnce({
+      id: '123',
+      title: 'Тестовый курс',
+      role: 'student',
+      authorId: 'other',
+      inviteCode: 'ABC123',
+    });
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/course/:id" element={<CoursePage />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>,
+      { route: '/course/123' }
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Новый пост')).not.toBeInTheDocument();
+      expect(screen.queryByText('Участники')).not.toBeInTheDocument();
+      expect(screen.queryByText('Редактировать')).not.toBeInTheDocument();
+      expect(screen.getByText('Покинуть')).toBeInTheDocument();
+    });
+  });
+});
+</file>
+
+<file path="src/pages/__tests__/DashboardPage.test.tsx">
+// src/pages/__tests__/DashboardPage.test.tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
+import { AuthProvider } from '../../shared/lib/authContext';
+import DashboardPage from '../DashboardPage';
+import { courseAPI } from '../../shared/api/endpoints';
+import { vi } from 'vitest';
+
+// Мокаем API
+vi.mock('../../shared/api/endpoints', () => ({
+  courseAPI: {
+    myCourses: vi.fn(),
+  },
+}));
+
+const mockCourses = {
+  records: [
+    { id: '1', title: 'Математика', role: 'teacher' },
+    { id: '2', title: 'Физика', role: 'student' },
+  ],
+};
+
+describe('DashboardPage', () => {
+  beforeEach(() => {
+    (courseAPI.myCourses as any).mockResolvedValue(mockCourses);
+  });
+
+  it('отображает список курсов', async () => {
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <DashboardPage />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Математика')).toBeInTheDocument();
+      expect(screen.getByText('Физика')).toBeInTheDocument();
+    });
+  });
+
+  it('отображает правильные теги ролей', async () => {
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <DashboardPage />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Преподаватель')).toBeInTheDocument();
+      expect(screen.getByText('Студент')).toBeInTheDocument();
+    });
+  });
+});
+</file>
+
+<file path="src/pages/AuthPage.jsx">
+import React, { useState } from 'react';
+import { Card, Tabs, Form, Input, Button, Typography, message } from 'antd';
+import { BookOutlined } from '@ant-design/icons';
+import { useAuth } from '../shared/lib/authContext';
+
+const { Title, Text } = Typography;
+
+export default function AuthPage() {
+  const { login, register } = useAuth();
+  const [tab, setTab] = useState('login');
+  const [loading, setLoading] = useState(false);
+
+  const onLogin = async (values) => {
+    setLoading(true);
+    try {
+      await login(values.email, values.password);
+      message.success('Добро пожаловать!');
+    } catch (e) {
+      message.error(e.message || 'Ошибка входа');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRegister = async (values) => {
+    setLoading(true);
+    try {
+      await register(values.credentials, values.email, values.password);
+      message.success('Регистрация прошла успешно!');
+    } catch (e) {
+      message.error(e.message || 'Ошибка регистрации');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: 'calc(100vh - 48px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: 16,
+        borderRadius: 32,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+      }}
+    >
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          borderRadius: 16,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <BookOutlined
+            style={{ fontSize: 48, color: '#1967d2', marginBottom: 8 }}
+          />
+          <Title level={3} style={{ margin: 0 }}>
+            Classroom
+          </Title>
+          <Text type="secondary">Система обучения</Text>
+        </div>
+
+        <Tabs
+          activeKey={tab}
+          onChange={setTab}
+          centered
+          items={[
+            {
+              key: 'login',
+              label: 'Вход',
+              children: (
+                <Form layout="vertical" onFinish={onLogin}>
+                  <Form.Item
+                    name="email"
+                    label="Email"
+                    rules={[
+                      { required: true, message: 'Введите email' },
+                      { type: 'email', message: 'Некорректный email' },
+                    ]}
+                  >
+                    <Input size="large" placeholder="you@example.com" />
+                  </Form.Item>
+                  <Form.Item
+                    name="password"
+                    label="Пароль"
+                    rules={[{ required: true, message: 'Введите пароль' }]}
+                  >
+                    <Input.Password size="large" placeholder="Пароль" />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      block
+                      size="large"
+                      loading={loading}
+                    >
+                      Войти
+                    </Button>
+                  </Form.Item>
+                </Form>
+              ),
+            },
+            {
+              key: 'register',
+              label: 'Регистрация',
+              children: (
+                <Form layout="vertical" onFinish={onRegister}>
+                  <Form.Item
+                    name="credentials"
+                    label="Имя"
+                    rules={[{ required: true, message: 'Введите имя' }]}
+                  >
+                    <Input size="large" placeholder="Иван Иванов" />
+                  </Form.Item>
+                  <Form.Item
+                    name="email"
+                    label="Email"
+                    rules={[
+                      { required: true, message: 'Введите email' },
+                      { type: 'email', message: 'Некорректный email' },
+                    ]}
+                  >
+                    <Input size="large" placeholder="you@example.com" />
+                  </Form.Item>
+                  <Form.Item
+                    name="password"
+                    label="Пароль"
+                    rules={[
+                      { required: true, message: 'Введите пароль' },
+                      { min: 6, message: 'Минимум 6 символов' },
+                    ]}
+                  >
+                    <Input.Password size="large" placeholder="Пароль" />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      block
+                      size="large"
+                      loading={loading}
+                    >
+                      Зарегистрироваться
+                    </Button>
+                  </Form.Item>
+                </Form>
+              ),
+            },
+          ]}
+        />
+      </Card>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/CoursePage.jsx">
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import {
+  Typography,
+  Tag,
+  Button,
+  Spin,
+  List,
+  Card,
+  Modal,
+  Input,
+  Form,
+  Pagination,
+  Tooltip,
+  message,
+  Popconfirm,
+  Space,
+} from 'antd';
+import {
+  PlusOutlined,
+  EditOutlined,
+  TeamOutlined,
+  FileTextOutlined,
+  CheckSquareOutlined,
+  CopyOutlined,
+  LogoutOutlined,
+  BarChartOutlined,
+} from '@ant-design/icons';
+import { courseAPI } from '../shared/api/endpoints';
+import { useAuth } from '../shared/lib/authContext';
+import dayjs from 'dayjs';
+
+const { Title, Text, Paragraph } = Typography;
+
+export default function CoursePage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [course, setCourse] = useState(null);
+  const [feed, setFeed] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm] = Form.useForm();
+
+  const pageSize = 10;
+  const isTeacher = course?.role === 'teacher';
+  const isAuthor = user && course && user.id === course.authorId;
+
+  const fetchCourse = useCallback(async () => {
+    try {
+      const data = await courseAPI.getById(id);
+      setCourse(data);
+    } catch (e) {
+      message.error(e.message);
+      navigate('/');
+    }
+  }, [id, navigate]);
+
+  const fetchFeed = useCallback(
+    async (p = 1) => {
+      setFeedLoading(true);
+      try {
+        const data = await courseAPI.getFeed(id, (p - 1) * pageSize, pageSize);
+        setFeed(data.records || []);
+        setTotal(data.totalRecords || 0);
+      } catch (e) {
+        message.error(e.message);
+      } finally {
+        setFeedLoading(false);
+      }
+    },
+    [id]
+  );
+
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await fetchCourse();
+      await fetchFeed(1);
+      setLoading(false);
+    };
+    init();
+  }, [fetchCourse, fetchFeed]);
+
+  const handlePageChange = (p) => {
+    setPage(p);
+    fetchFeed(p);
+  };
+
+  const handleEdit = async (values) => {
+    setEditLoading(true);
+    try {
+      await courseAPI.update(id, { title: values.title });
+      message.success('Курс обновлён');
+      setEditOpen(false);
+      fetchCourse();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleLeave = async () => {
+    try {
+      await courseAPI.leave(id);
+      message.success('Вы покинули курс');
+      navigate('/');
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const copyInviteCode = () => {
+    if (course?.inviteCode) {
+      navigator.clipboard.writeText(course.inviteCode);
+      message.success('Код скопирован');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!course) return null;
+
+  return (
+    <div>
+      {/* Course Header */}
+      <Card
+        style={{
+          borderRadius: 12,
+          marginBottom: 24,
+          background: 'linear-gradient(135deg, #1967d2, #4285f4)',
+          border: 'none',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div>
+            <Title level={2} style={{ color: '#fff', margin: 0 }}>
+              {course.title}
+            </Title>
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Tag color={isTeacher ? 'blue' : 'green'}>
+                {isTeacher ? 'Преподаватель' : 'Студент'}
+              </Tag>
+              {course.inviteCode && (
+                <Tooltip title="Нажмите, чтобы скопировать">
+                  <Tag
+                    icon={<CopyOutlined />}
+                    color="default"
+                    style={{ cursor: 'pointer' }}
+                    onClick={copyInviteCode}
+                  >
+                    Код: {course.inviteCode}
+                  </Tag>
+                </Tooltip>
+              )}
+            </div>
+          </div>
+          <Space wrap>
+            {isTeacher && (
+              <>
+                <Button
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate(`/course/${id}/new-post`)}
+                >
+                  Новый пост
+                </Button>
+                <Button
+                  icon={<TeamOutlined />}
+                  onClick={() => navigate(`/course/${id}/members`)}
+                >
+                  Участники
+                </Button>
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    editForm.setFieldsValue({ title: course.title });
+                    setEditOpen(true);
+                  }}
+                >
+                  Редактировать
+                </Button>
+              </>
+            )}
+            {!isAuthor && (
+              <Popconfirm
+                title="Вы уверены, что хотите покинуть курс?"
+                onConfirm={handleLeave}
+                okText="Да"
+                cancelText="Нет"
+              >
+                <Button danger icon={<LogoutOutlined />}>
+                  Покинуть
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        </div>
+      </Card>
+
+      {/* Feed */}
+      <Title level={4}>Лента курса</Title>
+
+      {feedLoading ? (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <Spin />
+        </div>
+      ) : feed.length === 0 ? (
+        <Card style={{ borderRadius: 12, textAlign: 'center', padding: 40 }}>
+          <Text type="secondary">Пока нет записей</Text>
+        </Card>
+      ) : (
+        <>
+          <List
+            dataSource={feed}
+            renderItem={(item) => (
+              <List.Item style={{ padding: 0, marginBottom: 12, border: 'none' }}>
+                <Card
+                  hoverable
+                  style={{ width: '100%', borderRadius: 10 }}
+                  onClick={() => navigate(`/post/${item.id}`)}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background:
+                          item.type === 'task' ? '#e8f0fe' : '#fce8e6',
+                        color:
+                          item.type === 'task' ? '#1967d2' : '#d93025',
+                        fontSize: 18,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.type === 'task' ? (
+                        <CheckSquareOutlined />
+                      ) : (
+                        <FileTextOutlined />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text strong style={{ fontSize: 15 }}>
+                        {item.title}
+                      </Text>
+                      <br />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {dayjs(item.createdDate).format('DD.MM.YYYY HH:mm')}
+                      </Text>
+                    </div>
+                    <Tag color={item.type === 'task' ? 'blue' : 'default'}>
+                      {item.type === 'task' ? 'Задание' : 'Пост'}
+                    </Tag>
+                    {isTeacher && item.type === 'task' && (
+                      <Tooltip title="Решения">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<BarChartOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/post/${item.id}/solutions`);
+                          }}
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
+                </Card>
+              </List.Item>
+            )}
+          />
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <Pagination
+              current={page}
+              total={total}
+              pageSize={pageSize}
+              onChange={handlePageChange}
+              showSizeChanger={false}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Edit Modal */}
+      <Modal
+        title="Редактировать курс"
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        footer={null}
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
+          <Form.Item
+            name="title"
+            label="Название"
+            rules={[{ required: true, message: 'Введите название' }]}
+          >
+            <Input size="large" />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={editLoading}
+            >
+              Сохранить
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/DashboardPage.jsx">
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Card,
+  Row,
+  Col,
+  Button,
+  Modal,
+  Input,
+  Form,
+  Typography,
+  Spin,
+  Empty,
+  Tag,
+  message,
+  Tooltip,
+} from 'antd';
+import {
+  PlusOutlined,
+  LoginOutlined,
+  BookOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import { courseAPI } from '../shared/api/endpoints';
+
+const { Title, Text } = Typography;
+
+const COLORS = [
+  '#1967d2',
+  '#137333',
+  '#e8710a',
+  '#a142f4',
+  '#d93025',
+  '#1a73e8',
+  '#188038',
+  '#f29900',
+  '#8430ce',
+  '#c5221f',
+];
+
+const getColor = (id) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return COLORS[Math.abs(hash) % COLORS.length];
+};
+
+export default function DashboardPage() {
+  const navigate = useNavigate();
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
+  const [createForm] = Form.useForm();
+  const [joinForm] = Form.useForm();
+
+  const fetchCourses = async () => {
+    try {
+      const data = await courseAPI.myCourses();
+      setCourses(data.records || []);
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const handleCreate = async (values) => {
+    setFormLoading(true);
+    try {
+      await courseAPI.create({ title: values.title });
+      message.success('Курс создан');
+      setCreateOpen(false);
+      createForm.resetFields();
+      fetchCourses();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleJoin = async (values) => {
+    setFormLoading(true);
+    try {
+      await courseAPI.join(values.inviteCode);
+      message.success('Вы присоединились к курсу');
+      setJoinOpen(false);
+      joinForm.resetFields();
+      fetchCourses();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 24,
+        }}
+      >
+        <Title level={3} style={{ margin: 0 }}>
+          Мои курсы
+        </Title>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Tooltip title="Присоединиться к курсу">
+            <Button icon={<LoginOutlined />} onClick={() => setJoinOpen(true)}>
+              Присоединиться
+            </Button>
+          </Tooltip>
+          <Tooltip title="Создать новый курс">
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setCreateOpen(true)}
+            >
+              Создать курс
+            </Button>
+          </Tooltip>
+        </div>
+      </div>
+
+      {courses.length === 0 ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="У вас пока нет курсов"
+        />
+      ) : (
+        <Row gutter={[16, 16]}>
+          {courses.map((course) => {
+            const color = getColor(course.id);
+            return (
+              <Col xs={24} sm={12} md={8} lg={6} key={course.id}>
+                <Card
+                  hoverable
+                  onClick={() => navigate(`/course/${course.id}`)}
+                  style={{ borderRadius: 12, overflow: 'hidden', height: '100%' }}
+                  styles={{ body: { padding: 0 } }}
+                >
+                  <div
+                    style={{
+                      background: color,
+                      padding: '24px 16px 16px',
+                      minHeight: 100,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'flex-end',
+                    }}
+                  >
+                    <Tooltip title={course.title} placement="topLeft">
+                      <Title
+                        level={4}
+                        style={{
+                          color: '#fff',
+                          margin: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {course.title}
+                      </Title>
+                    </Tooltip>
+                  </div>
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Tag
+                      color={course.role === 'teacher' ? 'blue' : 'green'}
+                      icon={
+                        course.role === 'teacher' ? (
+                          <BookOutlined />
+                        ) : (
+                          <UserOutlined />
+                        )
+                      }
+                    >
+                      {course.role === 'teacher' ? 'Преподаватель' : 'Студент'}
+                    </Tag>
+                  </div>
+                </Card>
+              </Col>
+            );
+          })}
+        </Row>
+      )}
+
+      {/* Create Course Modal */}
+      <Modal
+        title="Создать курс"
+        open={createOpen}
+        onCancel={() => {
+          setCreateOpen(false);
+          createForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+          <Form.Item
+            name="title"
+            label="Название курса"
+            rules={[{ required: true, message: 'Введите название' }]}
+          >
+            <Input size="large" placeholder="Математический анализ" />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={formLoading}
+            >
+              Создать
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Join Course Modal */}
+      <Modal
+        title="Присоединиться к курсу"
+        open={joinOpen}
+        onCancel={() => {
+          setJoinOpen(false);
+          joinForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={joinForm} layout="vertical" onFinish={handleJoin}>
+          <Form.Item
+            name="inviteCode"
+            label="Код приглашения"
+            rules={[{ required: true, message: 'Введите код' }]}
+          >
+            <Input size="large" placeholder="Введите код приглашения" />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={formLoading}
+            >
+              Присоединиться
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/MembersPage.jsx">
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Typography,
+  Card,
+  Table,
+  Tag,
+  Button,
+  Input,
+  Space,
+  Popconfirm,
+  message,
+  Spin,
+} from 'antd';
+import {
+  ArrowLeftOutlined,
+  SwapOutlined,
+  DeleteOutlined,
+  SearchOutlined,
+  CrownOutlined,
+} from '@ant-design/icons';
+import { courseAPI } from '../shared/api/endpoints';
+import { useAuth } from '../shared/lib/authContext';
+
+const { Title } = Typography;
+
+export default function MembersPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [members, setMembers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [course, setCourse] = useState(null);
+
+  const pageSize = 20;
+
+  const fetchCourse = useCallback(async () => {
+    try {
+      const data = await courseAPI.getById(id);
+      setCourse(data);
+    } catch (e) {
+      message.error(e.message);
+      navigate('/');
+    }
+  }, [id, navigate]);
+
+  const fetchMembers = useCallback(
+    async (p = 1, q = '') => {
+      setLoading(true);
+      try {
+        const data = await courseAPI.getMembers(
+          id,
+          (p - 1) * pageSize,
+          pageSize,
+          q
+        );
+        setMembers(data.records || []);
+        setTotal(data.totalRecords || 0);
+      } catch (e) {
+        message.error(e.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id]
+  );
+
+  useEffect(() => {
+    fetchCourse();
+    fetchMembers(1, '');
+  }, [fetchCourse, fetchMembers]);
+
+  const handleSearch = (value) => {
+    setSearch(value);
+    setPage(1);
+    fetchMembers(1, value);
+  };
+
+  const handlePageChange = (p) => {
+    setPage(p);
+    fetchMembers(p, search);
+  };
+
+  const handleChangeRole = async (userId, newRole) => {
+    try {
+      await courseAPI.changeMemberRole(id, userId, newRole);
+      message.success('Роль изменена');
+      fetchMembers(page, search);
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const handleRemove = async (userId) => {
+    try {
+      await courseAPI.removeMember(id, userId);
+      message.success('Участник удалён');
+      fetchMembers(page, search);
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Имя',
+      dataIndex: 'credentials',
+      key: 'credentials',
+      render: (text, record) => (
+        <Space>
+          {text}
+          {course && record.id === course.authorId && (
+            <CrownOutlined style={{ color: '#faad14' }} title="Создатель" />
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+    },
+    {
+      title: 'Роль',
+      dataIndex: 'role',
+      key: 'role',
+      render: (role) => (
+        <Tag color={role === 'teacher' ? 'blue' : 'green'}>
+          {role === 'teacher' ? 'Преподаватель' : 'Студент'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, record) => {
+        const isMe = user && record.id === user.id;
+        const isAuthor = course && record.id === course.authorId;
+        if (isMe || isAuthor) return null;
+
+        return (
+          <Space>
+            <Popconfirm
+              title={`Сменить роль на ${record.role === 'teacher' ? 'студент' : 'преподаватель'}?`}
+              onConfirm={() =>
+                handleChangeRole(
+                  record.id,
+                  record.role === 'teacher' ? 'student' : 'teacher'
+                )
+              }
+              okText="Да"
+              cancelText="Нет"
+            >
+              <Button
+                size="small"
+                icon={<SwapOutlined />}
+                title="Сменить роль"
+              >
+                {record.role === 'teacher' ? 'Понизить' : 'Повысить'}
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="Удалить участника из курса?"
+              onConfirm={() => handleRemove(record.id)}
+              okText="Да"
+              cancelText="Нет"
+            >
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                title="Удалить"
+              />
+            </Popconfirm>
+          </Space>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
+        <Button
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate(`/course/${id}`)}
+        />
+        <Title level={3} style={{ margin: 0 }}>
+          Участники курса
+        </Title>
+      </div>
+
+      <Card style={{ borderRadius: 12 }}>
+        <div style={{ marginBottom: 16 }}>
+          <Input.Search
+            placeholder="Поиск участников..."
+            onSearch={handleSearch}
+            enterButton={<SearchOutlined />}
+            size="large"
+            allowClear
+          />
+        </div>
+
+        <Table
+          columns={columns}
+          dataSource={members}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: page,
+            total,
+            pageSize,
+            onChange: handlePageChange,
+            showSizeChanger: false,
+          }}
+        />
+      </Card>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/PostFormPage.jsx">
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Card,
+  Form,
+  Input,
+  Button,
+  Select,
+  DatePicker,
+  InputNumber,
+  Switch,
+  Upload,
+  Tag,
+  Typography,
+  Spin,
+  message,
+} from 'antd';
+import { UploadOutlined, FileOutlined } from '@ant-design/icons';
+import { courseAPI, postAPI, filesAPI } from '../shared/api/endpoints';
+import dayjs from 'dayjs';
+
+const { Title } = Typography;
+const { TextArea } = Input;
+
+export default function PostFormPage() {
+  const { courseId, postId } = useParams();
+  const navigate = useNavigate();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [postType, setPostType] = useState('post');
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const isEdit = Boolean(postId);
+
+  useEffect(() => {
+    if (isEdit) {
+      setLoading(true);
+      postAPI
+        .getById(postId)
+        .then((data) => {
+          form.setFieldsValue({
+            type: data.type,
+            title: data.title,
+            text: data.text,
+            deadline: data.deadline ? dayjs(data.deadline) : null,
+            maxScore: data.maxScore,
+            taskType: data.taskType,
+            solvableAfterDeadline: data.solvableAfterDeadline ?? false,
+          });
+          setPostType(data.type);
+          if (data.files && data.files.length > 0) {
+            setFiles(data.files);
+          }
+        })
+        .catch((e) => {
+          message.error(e.message);
+          navigate(-1);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [isEdit, postId, form, navigate]);
+
+  const handleUpload = async (file) => {
+    setUploading(true);
+    try {
+      const data = await filesAPI.upload(file);
+      setFiles((prev) => [...prev, { id: data.id, name: file.name }]);
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setUploading(false);
+    }
+    return false;
+  };
+
+  const handleSubmit = async (values) => {
+    setSubmitting(true);
+    try {
+      const body = {
+        type: values.type,
+        title: values.title,
+        text: values.text || '',
+        files: files.map((f) => f.id),
+      };
+
+      if (values.type === 'task') {
+        body.deadline = values.deadline
+          ? values.deadline.toISOString()
+          : undefined;
+        body.maxScore = values.maxScore ?? 5;
+        body.taskType = values.taskType || 'mandatory';
+        body.solvableAfterDeadline = values.solvableAfterDeadline ?? false;
+      }
+
+      if (isEdit) {
+        await postAPI.update(postId, body);
+        message.success('Запись обновлена');
+        navigate(`/post/${postId}`);
+      } else {
+        const res = await courseAPI.createPost(courseId, body);
+        message.success('Запись создана');
+        navigate(`/post/${res.id}`);
+      }
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+      <Title level={3}>{isEdit ? 'Редактировать запись' : 'Новая запись'}</Title>
+
+      <Card style={{ borderRadius: 12 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          initialValues={{
+            type: 'post',
+            maxScore: 5,
+            taskType: 'mandatory',
+            solvableAfterDeadline: false,
+          }}
+        >
+          <Form.Item
+            name="type"
+            label="Тип"
+            rules={[{ required: true }]}
+          >
+            <Select
+              size="large"
+              onChange={(v) => setPostType(v)}
+              options={[
+                { value: 'post', label: 'Пост' },
+                { value: 'task', label: 'Задание' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="title"
+            label="Заголовок"
+            rules={[{ required: true, message: 'Введите заголовок' }]}
+          >
+            <Input size="large" placeholder="Заголовок" />
+          </Form.Item>
+
+          <Form.Item name="text" label="Текст">
+            <TextArea rows={5} placeholder="Содержание..." />
+          </Form.Item>
+
+          {postType === 'task' && (
+            <>
+              <Form.Item name="deadline" label="Дедлайн">
+                <DatePicker
+                  showTime
+                  size="large"
+                  style={{ width: '100%' }}
+                  format="DD.MM.YYYY HH:mm"
+                  placeholder="Выберите дату и время"
+                />
+              </Form.Item>
+
+              <Form.Item name="maxScore" label="Максимальный балл">
+                <InputNumber
+                  size="large"
+                  min={1}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+
+              <Form.Item name="taskType" label="Тип задания">
+                <Select
+                  size="large"
+                  options={[
+                    { value: 'mandatory', label: 'Обязательное' },
+                    { value: 'optional', label: 'Дополнительное' },
+                  ]}
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="solvableAfterDeadline"
+                label="Можно сдавать после дедлайна"
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+            </>
+          )}
+
+          {/* Files */}
+          <Form.Item label="Файлы">
+            <Upload beforeUpload={handleUpload} showUploadList={false}>
+              <Button icon={<UploadOutlined />} loading={uploading}>
+                Загрузить файл
+              </Button>
+            </Upload>
+            {files.length > 0 && (
+              <div
+                style={{
+                  marginTop: 8,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 4,
+                }}
+              >
+                {files.map((f) => (
+                  <Tag
+                    key={f.id}
+                    icon={<FileOutlined />}
+                    closable
+                    onClose={() =>
+                      setFiles((prev) => prev.filter((x) => x.id !== f.id))
+                    }
+                  >
+                    {f.name}
+                  </Tag>
+                ))}
+              </div>
+            )}
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              size="large"
+              block
+              loading={submitting}
+            >
+              {isEdit ? 'Сохранить' : 'Создать'}
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/PostPage.jsx">
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Typography,
+  Card,
+  Tag,
+  Button,
+  Spin,
+  Divider,
+  Input,
+  List,
+  message,
+  Popconfirm,
+  Space,
+  Upload,
+  Descriptions,
+} from 'antd';
+import {
+  ArrowLeftOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ClockCircleOutlined,
+  FileOutlined,
+  SendOutlined,
+  DownloadOutlined,
+  MessageOutlined,
+  DownOutlined,
+  UpOutlined,
+} from '@ant-design/icons';
+import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
+import { useAuth } from '../shared/lib/authContext';
+import dayjs from 'dayjs';
+
+const { Title, Text, Paragraph } = Typography;
+const { TextArea } = Input;
+
+/* ──────── Comment component (recursive) ──────── */
+function CommentItem({ comment, onRefreshParent }) {
+  const { user } = useAuth();
+  const [replies, setReplies] = useState([]);
+  const [showReplies, setShowReplies] = useState(false);
+  const [replying, setReplying] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.text);
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadReplies = async () => {
+    try {
+      const data = await commentAPI.getReplies(comment.id);
+      setReplies(Array.isArray(data) ? data : []);
+      setShowReplies(true);
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const toggleReplies = () => {
+    if (!showReplies && comment.nestedCount > 0) {
+      loadReplies();
+    } else {
+      setShowReplies(!showReplies);
+    }
+  };
+
+  const handleReply = async () => {
+    if (!replyText.trim()) return;
+    setSubmitting(true);
+    try {
+      await commentAPI.reply(comment.id, replyText.trim());
+      setReplyText('');
+      setReplying(false);
+      loadReplies();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editText.trim()) return;
+    setSubmitting(true);
+    try {
+      await commentAPI.update(comment.id, editText.trim());
+      comment.text = editText.trim();
+      setEditing(false);
+      message.success('Комментарий обновлён');
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await commentAPI.delete(comment.id);
+      message.success('Комментарий удалён');
+      if (onRefreshParent) onRefreshParent();
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const isOwn = user && comment.author && user.id === comment.author.id;
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        style={{
+          background: '#fafafa',
+          borderRadius: 8,
+          padding: '10px 14px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 4,
+          }}
+        >
+          <Text strong style={{ fontSize: 13 }}>
+            {comment.author?.credentials || 'Пользователь'}
+          </Text>
+          {isOwn && !comment.isDeleted && (
+            <Space size={4}>
+              <Button
+                type="text"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setEditing(true);
+                  setEditText(comment.text);
+                }}
+              />
+              <Popconfirm
+                title="Удалить комментарий?"
+                onConfirm={handleDelete}
+                okText="Да"
+                cancelText="Нет"
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                />
+              </Popconfirm>
+            </Space>
+          )}
+        </div>
+
+        {editing ? (
+          <div>
+            <TextArea
+              rows={2}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+            />
+            <Space style={{ marginTop: 6 }}>
+              <Button
+                type="primary"
+                size="small"
+                loading={submitting}
+                onClick={handleEdit}
+              >
+                Сохранить
+              </Button>
+              <Button size="small" onClick={() => setEditing(false)}>
+                Отмена
+              </Button>
+            </Space>
+          </div>
+        ) : (
+          <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+            {comment.text}
+          </Paragraph>
+        )}
+
+        <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            onClick={() => setReplying(!replying)}
+          >
+            Ответить
+          </Button>
+          {comment.nestedCount > 0 && (
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0 }}
+              icon={showReplies ? <UpOutlined /> : <DownOutlined />}
+              onClick={toggleReplies}
+            >
+              {showReplies ? 'Скрыть' : `Ответы (${comment.nestedCount})`}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {replying && (
+        <div style={{ marginLeft: 24, marginTop: 8 }}>
+          <TextArea
+            rows={2}
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            placeholder="Ваш ответ..."
+          />
+          <Space style={{ marginTop: 6 }}>
+            <Button
+              type="primary"
+              size="small"
+              loading={submitting}
+              onClick={handleReply}
+            >
+              Отправить
+            </Button>
+            <Button size="small" onClick={() => setReplying(false)}>
+              Отмена
+            </Button>
+          </Space>
+        </div>
+      )}
+
+      {showReplies && replies.length > 0 && (
+        <div style={{ marginLeft: 24, marginTop: 8 }}>
+          {replies.map((r) => (
+            <CommentItem
+              key={r.id}
+              comment={r}
+              onRefreshParent={loadReplies}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ──────── Main PostPage ──────── */
+export default function PostPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [post, setPost] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Solution state (students)
+  const [solution, setSolution] = useState(null);
+  const [solText, setSolText] = useState('');
+  const [solFiles, setSolFiles] = useState([]);
+  const [solUploading, setSolUploading] = useState(false);
+  const [solSubmitting, setSolSubmitting] = useState(false);
+
+  // Comment state
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState('');
+  const [commentLoading, setCommentLoading] = useState(false);
+
+  const fetchPost = useCallback(async () => {
+    try {
+      const data = await postAPI.getById(id);
+      setPost(data);
+    } catch (e) {
+      message.error(e.message);
+      navigate('/');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, navigate]);
+
+  const fetchComments = useCallback(async () => {
+    try {
+      const data = await commentAPI.getForPost(id);
+      setComments(Array.isArray(data) ? data : []);
+    } catch {
+      /* ignore */
+    }
+  }, [id]);
+
+  const fetchSolution = useCallback(async () => {
+    try {
+      const data = await solutionAPI.getMine(id);
+      setSolution(data);
+    } catch {
+      setSolution(null);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchPost();
+    fetchComments();
+  }, [fetchPost, fetchComments]);
+
+  // Fetch student solution if post is a task and user has userSolution
+  useEffect(() => {
+    if (post?.type === 'task') {
+      fetchSolution();
+    }
+  }, [post, fetchSolution]);
+
+  const handleDeletePost = async () => {
+    try {
+      await postAPI.delete(id);
+      message.success('Запись удалена');
+      navigate(-1);
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  /* ── Solution handlers ── */
+  const handleUploadSolFile = async (file) => {
+    setSolUploading(true);
+    try {
+      const data = await filesAPI.upload(file);
+      setSolFiles((prev) => [...prev, { id: data.id, name: file.name }]);
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSolUploading(false);
+    }
+    return false; // prevent default upload
+  };
+
+  const handleSubmitSolution = async () => {
+    setSolSubmitting(true);
+    try {
+      await solutionAPI.submit(id, {
+        text: solText,
+        files: solFiles.map((f) => f.id),
+      });
+      message.success('Решение отправлено');
+      setSolText('');
+      setSolFiles([]);
+      fetchSolution();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSolSubmitting(false);
+    }
+  };
+
+  const handleDeleteSolution = async () => {
+    try {
+      await solutionAPI.delete(id);
+      message.success('Решение удалено');
+      setSolution(null);
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  /* ── Comment handlers ── */
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+    setCommentLoading(true);
+    try {
+      await commentAPI.addToPost(id, commentText.trim());
+      setCommentText('');
+      fetchComments();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setCommentLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!post) return null;
+
+  const statusLabels = {
+    pending: { text: 'На проверке', color: 'processing' },
+    checked: { text: 'Проверено', color: 'success' },
+    returned: { text: 'Возвращено', color: 'warning' },
+  };
+
+  return (
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+      <Button
+        type="text"
+        icon={<ArrowLeftOutlined />}
+        onClick={() => navigate(-1)}
+        style={{ marginBottom: 16, fontSize: 15 }}
+      >
+        Назад
+      </Button>
+
+      {/* Post Card */}
+      <Card style={{ borderRadius: 12, marginBottom: 24 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <Tag color={post.type === 'task' ? 'blue' : 'default'}>
+              {post.type === 'task' ? 'Задание' : 'Пост'}
+            </Tag>
+            <Title level={3} style={{ margin: '8px 0 0' }}>
+              {post.title}
+            </Title>
+          </div>
+          <Space>
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => navigate(`/post/${id}/edit`)}
+            >
+              Редактировать
+            </Button>
+            <Popconfirm
+              title="Удалить запись?"
+              onConfirm={handleDeletePost}
+              okText="Да"
+              cancelText="Нет"
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                Удалить
+              </Button>
+            </Popconfirm>
+          </Space>
+        </div>
+
+        <Paragraph style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>
+          {post.text}
+        </Paragraph>
+
+        {/* Task details */}
+        {post.type === 'task' && (
+          <Descriptions
+            bordered
+            size="small"
+            column={1}
+            style={{ marginTop: 16 }}
+          >
+            {post.deadline && (
+              <Descriptions.Item label="Дедлайн">
+                <ClockCircleOutlined style={{ marginRight: 6 }} />
+                {dayjs(post.deadline).format('DD.MM.YYYY HH:mm')}
+              </Descriptions.Item>
+            )}
+            {post.maxScore != null && (
+              <Descriptions.Item label="Макс. балл">
+                {post.maxScore}
+              </Descriptions.Item>
+            )}
+            {post.taskType && (
+              <Descriptions.Item label="Тип">
+                <Tag color={post.taskType === 'mandatory' ? 'red' : 'blue'}>
+                  {post.taskType === 'mandatory'
+                    ? 'Обязательное'
+                    : 'Дополнительное'}
+                </Tag>
+              </Descriptions.Item>
+            )}
+            {post.solvableAfterDeadline != null && (
+              <Descriptions.Item label="Сдача после дедлайна">
+                {post.solvableAfterDeadline ? 'Да' : 'Нет'}
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
+
+        {/* Post files */}
+        {post.files && post.files.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <Text strong>Файлы:</Text>
+            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {post.files.map((f) => (
+                <a
+                  key={f.id}
+                  href={filesAPI.getUrl(f.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Tag icon={<FileOutlined />} color="blue" style={{ cursor: 'pointer' }}>
+                    {f.name}
+                  </Tag>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Solution section for students */}
+      {post.type === 'task' && (
+        <Card
+          title="Ваше решение"
+          style={{ borderRadius: 12, marginBottom: 24 }}
+        >
+          {solution ? (
+            <div>
+              <div style={{ marginBottom: 12 }}>
+                <Tag
+                  color={statusLabels[solution.status]?.color || 'default'}
+                >
+                  {statusLabels[solution.status]?.text || solution.status}
+                </Tag>
+                {solution.score != null && (
+                  <Tag color="green">
+                    Оценка: {solution.score}/{post.maxScore}
+                  </Tag>
+                )}
+                <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                  {dayjs(solution.updatedDate).format('DD.MM.YYYY HH:mm')}
+                </Text>
+              </div>
+              {solution.text && (
+                <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
+                  {solution.text}
+                </Paragraph>
+              )}
+              {solution.files && solution.files.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                  {solution.files.map((f) => (
+                    <a
+                      key={f.id}
+                      href={filesAPI.getUrl(f.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Tag icon={<DownloadOutlined />} color="blue">
+                        {f.name}
+                      </Tag>
+                    </a>
+                  ))}
+                </div>
+              )}
+              <Popconfirm
+                title="Удалить решение?"
+                onConfirm={handleDeleteSolution}
+                okText="Да"
+                cancelText="Нет"
+              >
+                <Button danger size="small">
+                  Удалить решение
+                </Button>
+              </Popconfirm>
+            </div>
+          ) : (
+            <div>
+              <TextArea
+                rows={3}
+                value={solText}
+                onChange={(e) => setSolText(e.target.value)}
+                placeholder="Комментарий к решению..."
+                style={{ marginBottom: 12 }}
+              />
+              <div style={{ marginBottom: 12 }}>
+                <Upload
+                  beforeUpload={handleUploadSolFile}
+                  showUploadList={false}
+                >
+                  <Button loading={solUploading} icon={<FileOutlined />}>
+                    Прикрепить файл
+                  </Button>
+                </Upload>
+                {solFiles.length > 0 && (
+                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {solFiles.map((f) => (
+                      <Tag
+                        key={f.id}
+                        closable
+                        onClose={() =>
+                          setSolFiles((prev) =>
+                            prev.filter((x) => x.id !== f.id)
+                          )
+                        }
+                      >
+                        {f.name}
+                      </Tag>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                loading={solSubmitting}
+                onClick={handleSubmitSolution}
+              >
+                Отправить решение
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Comments */}
+      <Card
+        title={
+          <span>
+            <MessageOutlined style={{ marginRight: 8 }} />
+            Комментарии
+          </span>
+        }
+        style={{ borderRadius: 12 }}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <TextArea
+            rows={2}
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder="Написать комментарий..."
+          />
+          <Button
+            type="primary"
+            size="small"
+            style={{ marginTop: 8 }}
+            loading={commentLoading}
+            onClick={handleAddComment}
+            icon={<SendOutlined />}
+          >
+            Отправить
+          </Button>
+        </div>
+
+        {comments.length === 0 ? (
+          <Text type="secondary">Пока нет комментариев</Text>
+        ) : (
+          comments.map((c) => (
+            <CommentItem
+              key={c.id}
+              comment={c}
+              onRefreshParent={fetchComments}
+            />
+          ))
+        )}
+      </Card>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/ProfilePage.jsx">
+import React, { useState } from 'react';
+import { Card, Form, Input, Button, Typography, message } from 'antd';
+import { UserOutlined, MailOutlined } from '@ant-design/icons';
+import { usersAPI } from '../shared/api/endpoints';
+import { useAuth } from '../shared/lib/authContext';
+
+const { Title } = Typography;
+
+export default function ProfilePage() {
+  const { user, updateUser } = useAuth();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (values) => {
+    setLoading(true);
+    try {
+      await usersAPI.update({
+        credentials: values.credentials,
+        email: values.email,
+      });
+      updateUser({ credentials: values.credentials, email: values.email });
+      message.success('Профиль обновлён');
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div style={{ maxWidth: 500, margin: '0 auto' }}>
+      <Title level={3}>Профиль</Title>
+
+      <Card style={{ borderRadius: 12 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          initialValues={{
+            credentials: user.credentials,
+            email: user.email,
+          }}
+        >
+          <Form.Item
+            name="credentials"
+            label="Имя"
+            rules={[{ required: true, message: 'Введите имя' }]}
+          >
+            <Input
+              size="large"
+              prefix={<UserOutlined />}
+              placeholder="Иван Иванов"
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[
+              { required: true, message: 'Введите email' },
+              { type: 'email', message: 'Некорректный email' },
+            ]}
+          >
+            <Input
+              size="large"
+              prefix={<MailOutlined />}
+              placeholder="you@example.com"
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={loading}
+            >
+              Сохранить
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/SolutionsPage.jsx">
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Typography,
+  Card,
+  Table,
+  Tag,
+  Button,
+  Select,
+  Space,
+  Drawer,
+  Descriptions,
+  Input,
+  InputNumber,
+  Modal,
+  Form,
+  Divider,
+  List,
+  message,
+  Spin,
+} from 'antd';
+import {
+  ArrowLeftOutlined,
+  CheckOutlined,
+  RollbackOutlined,
+  FileOutlined,
+  MessageOutlined,
+  SendOutlined,
+} from '@ant-design/icons';
+import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
+import dayjs from 'dayjs';
+
+const { Title, Text, Paragraph } = Typography;
+const { TextArea } = Input;
+
+const statusMap = {
+  pending: { text: 'На проверке', color: 'processing' },
+  checked: { text: 'Проверено', color: 'success' },
+  returned: { text: 'Возвращено', color: 'warning' },
+};
+
+export default function SolutionsPage() {
+  const { postId } = useParams();
+  const navigate = useNavigate();
+
+  const [post, setPost] = useState(null);
+  const [solutions, setSolutions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  // Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  // Review modal
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewForm] = Form.useForm();
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  // Solution comments
+  const [solComments, setSolComments] = useState([]);
+  const [solCommentText, setSolCommentText] = useState('');
+  const [solCommentLoading, setSolCommentLoading] = useState(false);
+
+  const pageSize = 20;
+
+  const fetchPost = useCallback(async () => {
+    try {
+      const data = await postAPI.getById(postId);
+      setPost(data);
+    } catch (e) {
+      message.error(e.message);
+      navigate(-1);
+    }
+  }, [postId, navigate]);
+
+  const fetchSolutions = useCallback(
+    async (p = 1, status = '') => {
+      setLoading(true);
+      try {
+        const data = await solutionAPI.getAll(
+          postId,
+          (p - 1) * pageSize,
+          pageSize,
+          status
+        );
+        setSolutions(data.records || []);
+        setTotal(data.totalRecords || 0);
+      } catch (e) {
+        message.error(e.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [postId]
+  );
+
+  useEffect(() => {
+    fetchPost();
+    fetchSolutions(1, '');
+  }, [fetchPost, fetchSolutions]);
+
+  const handleStatusChange = (v) => {
+    setStatusFilter(v);
+    setPage(1);
+    fetchSolutions(1, v);
+  };
+
+  const handlePageChange = (p) => {
+    setPage(p);
+    fetchSolutions(p, statusFilter);
+  };
+
+  const openDrawer = async (sol) => {
+    setSelected(sol);
+    setDrawerOpen(true);
+    // Load comments
+    try {
+      const data = await commentAPI.getForSolution(sol.id);
+      setSolComments(Array.isArray(data) ? data : []);
+    } catch {
+      setSolComments([]);
+    }
+  };
+
+  const handleReview = async (values) => {
+    if (!selected) return;
+    setReviewLoading(true);
+    try {
+      await solutionAPI.review(selected.id, {
+        score: values.score,
+        status: values.status,
+        comment: values.comment || '',
+      });
+      message.success('Решение оценено');
+      setReviewOpen(false);
+      reviewForm.resetFields();
+      fetchSolutions(page, statusFilter);
+      setDrawerOpen(false);
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const handleAddSolComment = async () => {
+    if (!solCommentText.trim() || !selected) return;
+    setSolCommentLoading(true);
+    try {
+      await commentAPI.addToSolution(selected.id, solCommentText.trim());
+      setSolCommentText('');
+      const data = await commentAPI.getForSolution(selected.id);
+      setSolComments(Array.isArray(data) ? data : []);
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSolCommentLoading(false);
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Студент',
+      key: 'user',
+      render: (_, record) => record.user?.credentials || '—',
+    },
+    {
+      title: 'Статус',
+      dataIndex: 'status',
+      key: 'status',
+      render: (s) => (
+        <Tag color={statusMap[s]?.color || 'default'}>
+          {statusMap[s]?.text || s}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Оценка',
+      dataIndex: 'score',
+      key: 'score',
+      render: (s) =>
+        s != null ? `${s}/${post?.maxScore || '?'}` : '—',
+    },
+    {
+      title: 'Дата',
+      dataIndex: 'updatedDate',
+      key: 'updatedDate',
+      render: (d) => (d ? dayjs(d).format('DD.MM.YYYY HH:mm') : '—'),
+    },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, record) => (
+        <Button type="link" onClick={() => openDrawer(record)}>
+          Подробнее
+        </Button>
+      ),
+    },
+  ];
+
+  if (!post && !loading) return null;
+
+  return (
+    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} />
+        <div>
+          <Title level={3} style={{ margin: 0 }}>
+            Решения: {post?.title || ''}
+          </Title>
+          {post?.maxScore && (
+            <Text type="secondary">Макс. балл: {post.maxScore}</Text>
+          )}
+        </div>
+      </div>
+
+      <Card style={{ borderRadius: 12 }}>
+        <div style={{ marginBottom: 16 }}>
+          <Select
+            value={statusFilter}
+            onChange={handleStatusChange}
+            style={{ width: 200 }}
+            size="large"
+            placeholder="Фильтр по статусу"
+            allowClear
+            options={[
+              { value: '', label: 'Все статусы' },
+              { value: 'pending', label: 'На проверке' },
+              { value: 'checked', label: 'Проверено' },
+              { value: 'returned', label: 'Возвращено' },
+            ]}
+          />
+        </div>
+
+        <Table
+          columns={columns}
+          dataSource={solutions}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: page,
+            total,
+            pageSize,
+            onChange: handlePageChange,
+            showSizeChanger: false,
+          }}
+        />
+      </Card>
+
+      {/* Solution Detail Drawer */}
+      <Drawer
+        title="Решение студента"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        width={520}
+        extra={
+          <Button
+            type="primary"
+            onClick={() => {
+              reviewForm.setFieldsValue({
+                score: selected?.score || 0,
+                status: 'checked',
+                comment: '',
+              });
+              setReviewOpen(true);
+            }}
+          >
+            Оценить
+          </Button>
+        }
+      >
+        {selected && (
+          <div>
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Студент">
+                {selected.user?.credentials}
+              </Descriptions.Item>
+              <Descriptions.Item label="Статус">
+                <Tag color={statusMap[selected.status]?.color || 'default'}>
+                  {statusMap[selected.status]?.text || selected.status}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Оценка">
+                {selected.score != null
+                  ? `${selected.score}/${post?.maxScore || '?'}`
+                  : '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Дата">
+                {selected.updatedDate
+                  ? dayjs(selected.updatedDate).format('DD.MM.YYYY HH:mm')
+                  : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+
+            {selected.text && (
+              <div style={{ marginTop: 16 }}>
+                <Text strong>Комментарий студента:</Text>
+                <Paragraph style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>
+                  {selected.text}
+                </Paragraph>
+              </div>
+            )}
+
+            {selected.files && selected.files.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <Text strong>Файлы:</Text>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}
+                >
+                  {selected.files.map((f) => (
+                    <a
+                      key={f.id}
+                      href={filesAPI.getUrl(f.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Tag icon={<FileOutlined />} color="blue">
+                        {f.name}
+                      </Tag>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Divider />
+
+            {/* Solution comments */}
+            <div>
+              <Title level={5}>
+                <MessageOutlined style={{ marginRight: 6 }} />
+                Комментарии к решению
+              </Title>
+
+              <div style={{ marginBottom: 12 }}>
+                <TextArea
+                  rows={2}
+                  value={solCommentText}
+                  onChange={(e) => setSolCommentText(e.target.value)}
+                  placeholder="Написать комментарий..."
+                />
+                <Button
+                  type="primary"
+                  size="small"
+                  style={{ marginTop: 6 }}
+                  loading={solCommentLoading}
+                  onClick={handleAddSolComment}
+                  icon={<SendOutlined />}
+                >
+                  Отправить
+                </Button>
+              </div>
+
+              {solComments.length === 0 ? (
+                <Text type="secondary">Нет комментариев</Text>
+              ) : (
+                <List
+                  dataSource={solComments}
+                  renderItem={(c) => (
+                    <List.Item style={{ padding: '8px 0' }}>
+                      <div>
+                        <Text strong style={{ fontSize: 13 }}>
+                          {c.author?.credentials || 'Пользователь'}
+                        </Text>
+                        <Paragraph
+                          style={{
+                            margin: '2px 0 0',
+                            whiteSpace: 'pre-wrap',
+                            fontSize: 13,
+                          }}
+                        >
+                          {c.text}
+                        </Paragraph>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Review Modal */}
+      <Modal
+        title="Оценить решение"
+        open={reviewOpen}
+        onCancel={() => setReviewOpen(false)}
+        footer={null}
+      >
+        <Form form={reviewForm} layout="vertical" onFinish={handleReview}>
+          <Form.Item
+            name="score"
+            label={`Оценка (макс. ${post?.maxScore || 5})`}
+            rules={[{ required: true, message: 'Введите оценку' }]}
+          >
+            <InputNumber
+              min={0}
+              max={post?.maxScore || 100}
+              size="large"
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="status"
+            label="Статус"
+            rules={[{ required: true }]}
+          >
+            <Select
+              size="large"
+              options={[
+                {
+                  value: 'checked',
+                  label: (
+                    <span>
+                      <CheckOutlined style={{ color: '#52c41a', marginRight: 6 }} />
+                      Принято
+                    </span>
+                  ),
+                },
+                {
+                  value: 'returned',
+                  label: (
+                    <span>
+                      <RollbackOutlined
+                        style={{ color: '#faad14', marginRight: 6 }}
+                      />
+                      Вернуть на доработку
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item name="comment" label="Комментарий">
+            <TextArea rows={3} placeholder="Приватный комментарий..." />
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={reviewLoading}
+            >
+              Отправить оценку
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+</file>
+
+<file path="src/shared/api/client.js">
+import axios from 'axios';
+
+const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:5174/api';
+
+const client = axios.create({
+  baseURL: API_HOST,
+});
+
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token);
+  });
+  failedQueue = [];
+};
+
+client.interceptors.request.use((config) => {
+  const accessToken = localStorage.getItem('accessToken');
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
+});
+
+client.interceptors.response.use(
+  (response) => {
+    if (response.data && response.data.type === 'success') {
+      return response.data.data;
+    }
+    return response.data;
+  },
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return client(originalRequest);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) throw new Error('No refresh token');
+
+        const res = await axios.post(`${API_HOST}/auth/refresh`, null, {
+          headers: { Authorization: `Bearer ${refreshToken}` },
+        });
+
+        const data = res.data?.data || res.data;
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        processQueue(null, data.accessToken);
+        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        return client(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    const serverMessage =
+      error.response?.data?.message || error.message || 'Ошибка сервера';
+    return Promise.reject(new Error(serverMessage));
+  }
+);
+
+export default client;
+</file>
+
+<file path="src/shared/api/endpoints.js">
+import client from './client';
+
+// ─── Auth ──────────────────────────────────────────────────
+export const authAPI = {
+  register: (body) => client.post('/auth/register', body),
+  login: (body) => client.post('/auth/login', body),
+  logout: () => client.post('/auth/logout'),
+  refresh: () => client.post('/auth/refresh'),
+};
+
+// ─── Users ─────────────────────────────────────────────────
+export const usersAPI = {
+  me: () => client.get('/users'),
+  getById: (id) => client.get(`/users/${id}`),
+  update: (body) => client.put('/users', body),
+};
+
+// ─── Courses ───────────────────────────────────────────────
+export const courseAPI = {
+  create: (body) => client.post('/course', body),
+  myCourses: () => client.get('/user/courses'),
+  getById: (id) => client.get(`/course/${id}`),
+  update: (id, body) => client.put(`/course/${id}`, body),
+  join: (inviteCode) => client.post('/course/join', { inviteCode }),
+  leave: (id) => client.delete(`/course/${id}/leave`),
+
+  // Feed
+  getFeed: (id, skip = 0, take = 10) =>
+    client.get(`/course/${id}/feed?skip=${skip}&take=${take}`),
+
+  // Members
+  getMembers: (id, skip = 0, take = 20, query = '') =>
+    client.get(
+      `/course/${id}/members?skip=${skip}&take=${take}${query ? `&query=${encodeURIComponent(query)}` : ''}`
+    ),
+  changeMemberRole: (courseId, userId, role) =>
+    client.put(`/course/${courseId}/members/${userId}/role`, { role }),
+  removeMember: (courseId, userId) =>
+    client.delete(`/course/${courseId}/members/${userId}`),
+
+  // Posts / Tasks
+  createPost: (courseId, body) => client.post(`/course/${courseId}/task`, body),
+};
+
+// ─── Posts ──────────────────────────────────────────────────
+export const postAPI = {
+  getById: (id) => client.get(`/post/${id}`),
+  update: (id, body) => client.put(`/post/${id}`, body),
+  delete: (id) => client.delete(`/post/${id}`),
+};
+
+// ─── Solutions ─────────────────────────────────────────────
+export const solutionAPI = {
+  submit: (taskId, body) => client.put(`/task/${taskId}/solution`, body),
+  delete: (taskId) => client.delete(`/task/${taskId}/solution`),
+  getMine: (taskId) => client.get(`/task/${taskId}/solution`),
+  getAll: (taskId, skip = 0, take = 20, status = '', studentId = '') => {
+    let url = `/task/${taskId}/solutions?skip=${skip}&take=${take}`;
+    if (status) url += `&status=${status}`;
+    if (studentId) url += `&studentId=${studentId}`;
+    return client.get(url);
+  },
+  review: (solutionId, body) =>
+    client.post(`/solution/${solutionId}/review`, body),
+};
+
+// ─── Comments ──────────────────────────────────────────────
+export const commentAPI = {
+  addToPost: (postId, text) =>
+    client.post(`/post/${postId}/comment`, { text }),
+  addToSolution: (solutionId, text) =>
+    client.post(`/solution/${solutionId}/comment`, { text }),
+  getForPost: (postId) => client.get(`/post/${postId}/comment`),
+  getForSolution: (solutionId) =>
+    client.get(`/solution/${solutionId}/comment`),
+  getReplies: (commentId) => client.get(`/comment/${commentId}/replies`),
+  reply: (commentId, text) =>
+    client.post(`/comment/${commentId}/reply`, { text }),
+  update: (commentId, text) =>
+    client.put(`/comment/${commentId}`, { text }),
+  delete: (commentId) => client.delete(`/comment/${commentId}`),
+};
+
+// ─── Files ─────────────────────────────────────────────────
+export const filesAPI = {
+  upload: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return client.post('/files/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  getUrl: (id) => {
+    const base = import.meta.env.VITE_API_HOST || 'http://localhost:5174/api';
+    return `${base}/files/${id}`;
+  },
+};
+</file>
+
+<file path="src/shared/lib/__tests__/authContext.test.tsx">
+// src/shared/lib/__tests__/authContext.test.tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { AuthProvider, useAuth } from '../authContext';
+import { authAPI, usersAPI } from '../../api/endpoints';
+import { vi } from 'vitest';
+
+vi.mock('../../api/endpoints', () => ({
+  authAPI: {
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+  },
+  usersAPI: {
+    me: vi.fn(),
+  },
+}));
+
+const TestComponent = () => {
+  const { user, login, logout } = useAuth();
+  return (
+    <div>
+      <div data-testid="user">{user ? user.credentials : 'no user'}</div>
+      <button onClick={() => login('test@mail.com', 'pass')}>Login</button>
+      <button onClick={logout}>Logout</button>
+    </div>
+  );
+};
+
+describe('AuthContext', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  it('при успешном входе устанавливает пользователя и сохраняет токены', async () => {
+    (authAPI.login as any).mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+    });
+    (usersAPI.me as any).mockResolvedValue({
+      id: '1',
+      credentials: 'Test User',
+      email: 'test@mail.com',
+    });
+
+    render(
+      <AuthProvider>
+        <TestComponent />
+      </AuthProvider>
+    );
+
+    expect(screen.getByTestId('user')).toHaveTextContent('no user');
+
+    await userEvent.click(screen.getByText('Login'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user')).toHaveTextContent('Test User');
+    });
+
+    expect(localStorage.getItem('accessToken')).toBe('access');
+    expect(localStorage.getItem('refreshToken')).toBe('refresh');
+  });
+
+  it('при выходе удаляет пользователя и токены', async () => {
+    localStorage.setItem('accessToken', 'access');
+    localStorage.setItem('refreshToken', 'refresh');
+    (usersAPI.me as any).mockResolvedValue({
+      id: '1',
+      credentials: 'Test User',
+      email: 'test@mail.com',
+    });
+    (authAPI.logout as any).mockResolvedValue({});
+
+    render(
+      <AuthProvider>
+        <TestComponent />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user')).toHaveTextContent('Test User');
+    });
+
+    await userEvent.click(screen.getByText('Logout'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user')).toHaveTextContent('no user');
+    });
+
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
+  });
+});
+</file>
+
+<file path="src/shared/lib/authContext.jsx">
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { authAPI, usersAPI } from '../api/endpoints';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchUser = useCallback(async () => {
+    try {
+      const data = await usersAPI.me();
+      setUser(data);
+    } catch {
+      setUser(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      fetchUser();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchUser]);
+
+  const login = async (email, password) => {
+    const data = await authAPI.login({ email, password });
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    await fetchUser();
+  };
+
+  const register = async (credentials, email, password) => {
+    const data = await authAPI.register({ credentials, email, password });
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    await fetchUser();
+  };
+
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch {
+      /* ignore */
+    }
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    setUser(null);
+  };
+
+  const updateUser = (data) => setUser((prev) => ({ ...prev, ...data }));
+
+  return (
+    <AuthContext.Provider
+      value={{ user, loading, login, register, logout, updateUser, fetchUser }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+}
+</file>
+
+<file path="src/test/setup.ts">
+import '@testing-library/jest-dom';
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "types": ["node"],
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Path mapping */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
+    /* Linting */
+    "allowJs": true,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src", "vite.config.ts"]
+}
+</file>
+
+<file path="vite.config.ts">
+import path from "path";
+import { fileURLToPath } from "url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import { viteSingleFile } from "vite-plugin-singlefile";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react(), tailwindcss(), viteSingleFile()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+    },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
+});
+</file>
+
+<file path=".gitignore">
+node_modules
+</file>
+
+<file path="package.json">
+{
+  "name": "react-vite-tailwind",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "antd": "^6.3.2",
+    "axios": "^1.13.6",
+    "clsx": "2.1.1",
+    "dayjs": "^1.11.19",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-router-dom": "^7.13.1",
+    "tailwind-merge": "3.4.0",
+    "vitest": "^4.0.18"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "jest": "^30.3.0",
+    "jsdom": "^28.1.0",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.2.4",
+    "vite-plugin-singlefile": "2.3.0"
+  }
+}
+</file>
+
+<file path="src/index.css">
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f8f9fa;
+}
+
+/* Smooth transitions for cards */
+.ant-card {
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.ant-card-hoverable:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12) !important;
+  transform: translateY(-2px);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Tag cursor */
+.ant-tag {
+  cursor: default;
+}
+
+/* Better table styling */
+.ant-table-wrapper {
+  border-radius: 8px;
+  overflow: hidden;
+}
+</file>
+
+</files>
