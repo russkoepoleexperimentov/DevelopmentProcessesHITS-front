@@ -29,6 +29,7 @@ import {
 } from '@ant-design/icons';
 import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
+import CommentItem from '../shared/ui/CommentItem';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -369,27 +370,16 @@ export default function SolutionsPage() {
               {solComments.length === 0 ? (
                 <Text type="secondary">Нет комментариев</Text>
               ) : (
-                <List
-                  dataSource={solComments}
-                  renderItem={(c) => (
-                    <List.Item style={{ padding: '8px 0' }}>
-                      <div>
-                        <Text strong style={{ fontSize: 13 }}>
-                          {c.author?.credentials || 'Пользователь'}
-                        </Text>
-                        <Paragraph
-                          style={{
-                            margin: '2px 0 0',
-                            whiteSpace: 'pre-wrap',
-                            fontSize: 13,
-                          }}
-                        >
-                          {c.text}
-                        </Paragraph>
-                      </div>
-                    </List.Item>
-                  )}
-                />
+                solComments.map((c) => (
+                  <CommentItem
+                    key={c.id}
+                    comment={c}
+                    onRefreshParent={() => {
+                      // Перезагружаем комментарии после изменений (удаление/редактирование/ответ)
+                      commentAPI.getForSolution(selected.id).then(setSolComments).catch(() => setSolComments([]));
+                    }}
+                  />
+                ))
               )}
             </div>
           </div>

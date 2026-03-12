@@ -51,8 +51,6 @@ package.json
 src/App.tsx
 src/index.css
 src/main.tsx
-src/pages/__tests__/CoursePage.test.tsx
-src/pages/__tests__/DashboardPage.test.tsx
 src/pages/AuthPage.jsx
 src/pages/CoursePage.jsx
 src/pages/DashboardPage.jsx
@@ -63,9 +61,7 @@ src/pages/ProfilePage.jsx
 src/pages/SolutionsPage.jsx
 src/shared/api/client.js
 src/shared/api/endpoints.js
-src/shared/lib/__tests__/authContext.test.tsx
 src/shared/lib/authContext.jsx
-src/test/setup.ts
 tsconfig.json
 vite.config.ts
 </directory_structure>
@@ -903,150 +899,6 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>
 );
-</file>
-
-<file path="src/pages/__tests__/CoursePage.test.tsx">
-// src/pages/__tests__/CoursePage.test.tsx
-import { render, screen, waitFor } from '@testing-library/react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { AuthProvider } from '../../shared/lib/authContext';
-import CoursePage from '../CoursePage';
-import { courseAPI, postAPI } from '../../shared/api/endpoints';
-import { vi } from 'vitest';
-
-vi.mock('../../shared/api/endpoints', () => ({
-  courseAPI: {
-    getById: vi.fn(),
-    getFeed: vi.fn(),
-    leave: vi.fn(),
-  },
-  postAPI: {},
-}));
-
-describe('CoursePage', () => {
-  beforeEach(() => {
-    (courseAPI.getById as any).mockResolvedValue({
-      id: '123',
-      title: 'Тестовый курс',
-      role: 'teacher',
-      authorId: 'user1',
-      inviteCode: 'ABC123',
-    });
-    (courseAPI.getFeed as any).mockResolvedValue({
-      records: [],
-      totalRecords: 0,
-    });
-  });
-
-  it('показывает кнопки преподавателя для пользователя с ролью teacher', async () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/course/:id" element={<CoursePage />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>,
-      { route: '/course/123' }
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Новый пост')).toBeInTheDocument();
-      expect(screen.getByText('Участники')).toBeInTheDocument();
-      expect(screen.getByText('Редактировать')).toBeInTheDocument();
-      // Кнопка "Покинуть курс" не должна отображаться для преподавателя-автора
-      expect(screen.queryByText('Покинуть')).not.toBeInTheDocument();
-    });
-  });
-
-  it('не показывает кнопки преподавателя для студента', async () => {
-    (courseAPI.getById as any).mockResolvedValueOnce({
-      id: '123',
-      title: 'Тестовый курс',
-      role: 'student',
-      authorId: 'other',
-      inviteCode: 'ABC123',
-    });
-
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/course/:id" element={<CoursePage />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>,
-      { route: '/course/123' }
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByText('Новый пост')).not.toBeInTheDocument();
-      expect(screen.queryByText('Участники')).not.toBeInTheDocument();
-      expect(screen.queryByText('Редактировать')).not.toBeInTheDocument();
-      expect(screen.getByText('Покинуть')).toBeInTheDocument();
-    });
-  });
-});
-</file>
-
-<file path="src/pages/__tests__/DashboardPage.test.tsx">
-// src/pages/__tests__/DashboardPage.test.tsx
-import { render, screen, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from '../../shared/lib/authContext';
-import DashboardPage from '../DashboardPage';
-import { courseAPI } from '../../shared/api/endpoints';
-import { vi } from 'vitest';
-
-// Мокаем API
-vi.mock('../../shared/api/endpoints', () => ({
-  courseAPI: {
-    myCourses: vi.fn(),
-  },
-}));
-
-const mockCourses = {
-  records: [
-    { id: '1', title: 'Математика', role: 'teacher' },
-    { id: '2', title: 'Физика', role: 'student' },
-  ],
-};
-
-describe('DashboardPage', () => {
-  beforeEach(() => {
-    (courseAPI.myCourses as any).mockResolvedValue(mockCourses);
-  });
-
-  it('отображает список курсов', async () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <DashboardPage />
-        </AuthProvider>
-      </BrowserRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Математика')).toBeInTheDocument();
-      expect(screen.getByText('Физика')).toBeInTheDocument();
-    });
-  });
-
-  it('отображает правильные теги ролей', async () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <DashboardPage />
-        </AuthProvider>
-      </BrowserRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Преподаватель')).toBeInTheDocument();
-      expect(screen.getByText('Студент')).toBeInTheDocument();
-    });
-  });
-});
 </file>
 
 <file path="src/pages/AuthPage.jsx">
@@ -2327,6 +2179,7 @@ export default function PostFormPage() {
 </file>
 
 <file path="src/pages/PostPage.jsx">
+// src/pages/PostPage.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -2587,7 +2440,12 @@ export default function PostPage() {
   const [solUploading, setSolUploading] = useState(false);
   const [solSubmitting, setSolSubmitting] = useState(false);
 
-  // Comment state
+  // Solution comments state
+  const [solutionComments, setSolutionComments] = useState([]);
+  const [solCommentText, setSolCommentText] = useState('');
+  const [solCommentLoading, setSolCommentLoading] = useState(false);
+
+  // Comment state for post
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
@@ -2622,6 +2480,16 @@ export default function PostPage() {
     }
   }, [id]);
 
+  const fetchSolutionComments = useCallback(async () => {
+    if (!solution) return;
+    try {
+      const data = await commentAPI.getForSolution(solution.id);
+      setSolutionComments(Array.isArray(data) ? data : []);
+    } catch {
+      setSolutionComments([]);
+    }
+  }, [solution]);
+
   useEffect(() => {
     fetchPost();
     fetchComments();
@@ -2633,6 +2501,13 @@ export default function PostPage() {
       fetchSolution();
     }
   }, [post, fetchSolution]);
+
+  // Fetch solution comments when solution changes
+  useEffect(() => {
+    if (solution) {
+      fetchSolutionComments();
+    }
+  }, [solution, fetchSolutionComments]);
 
   const handleDeletePost = async () => {
     try {
@@ -2683,6 +2558,20 @@ export default function PostPage() {
       setSolution(null);
     } catch (e) {
       message.error(e.message);
+    }
+  };
+
+  const handleAddSolutionComment = async () => {
+    if (!solCommentText.trim() || !solution) return;
+    setSolCommentLoading(true);
+    try {
+      await commentAPI.addToSolution(solution.id, solCommentText.trim());
+      setSolCommentText('');
+      fetchSolutionComments();
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSolCommentLoading(false);
     }
   };
 
@@ -2882,6 +2771,46 @@ export default function PostPage() {
                   Удалить решение
                 </Button>
               </Popconfirm>
+
+              {/* Solution Comments */}
+              <Divider />
+              <div>
+                <Title level={5}>
+                  <MessageOutlined style={{ marginRight: 6 }} />
+                  Комментарии к решению
+                </Title>
+
+                <div style={{ marginBottom: 12 }}>
+                  <TextArea
+                    rows={2}
+                    value={solCommentText}
+                    onChange={(e) => setSolCommentText(e.target.value)}
+                    placeholder="Написать комментарий..."
+                  />
+                  <Button
+                    type="primary"
+                    size="small"
+                    style={{ marginTop: 6 }}
+                    loading={solCommentLoading}
+                    onClick={handleAddSolutionComment}
+                    icon={<SendOutlined />}
+                  >
+                    Отправить
+                  </Button>
+                </div>
+
+                {solutionComments.length === 0 ? (
+                  <Text type="secondary">Нет комментариев</Text>
+                ) : (
+                  solutionComments.map((c) => (
+                    <CommentItem
+                      key={c.id}
+                      comment={c}
+                      onRefreshParent={fetchSolutionComments}
+                    />
+                  ))
+                )}
+              </div>
             </div>
           ) : (
             <div>
@@ -3728,103 +3657,6 @@ export const filesAPI = {
 };
 </file>
 
-<file path="src/shared/lib/__tests__/authContext.test.tsx">
-// src/shared/lib/__tests__/authContext.test.tsx
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { AuthProvider, useAuth } from '../authContext';
-import { authAPI, usersAPI } from '../../api/endpoints';
-import { vi } from 'vitest';
-
-vi.mock('../../api/endpoints', () => ({
-  authAPI: {
-    login: vi.fn(),
-    register: vi.fn(),
-    logout: vi.fn(),
-  },
-  usersAPI: {
-    me: vi.fn(),
-  },
-}));
-
-const TestComponent = () => {
-  const { user, login, logout } = useAuth();
-  return (
-    <div>
-      <div data-testid="user">{user ? user.credentials : 'no user'}</div>
-      <button onClick={() => login('test@mail.com', 'pass')}>Login</button>
-      <button onClick={logout}>Logout</button>
-    </div>
-  );
-};
-
-describe('AuthContext', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.clearAllMocks();
-  });
-
-  it('при успешном входе устанавливает пользователя и сохраняет токены', async () => {
-    (authAPI.login as any).mockResolvedValue({
-      accessToken: 'access',
-      refreshToken: 'refresh',
-    });
-    (usersAPI.me as any).mockResolvedValue({
-      id: '1',
-      credentials: 'Test User',
-      email: 'test@mail.com',
-    });
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    expect(screen.getByTestId('user')).toHaveTextContent('no user');
-
-    await userEvent.click(screen.getByText('Login'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toHaveTextContent('Test User');
-    });
-
-    expect(localStorage.getItem('accessToken')).toBe('access');
-    expect(localStorage.getItem('refreshToken')).toBe('refresh');
-  });
-
-  it('при выходе удаляет пользователя и токены', async () => {
-    localStorage.setItem('accessToken', 'access');
-    localStorage.setItem('refreshToken', 'refresh');
-    (usersAPI.me as any).mockResolvedValue({
-      id: '1',
-      credentials: 'Test User',
-      email: 'test@mail.com',
-    });
-    (authAPI.logout as any).mockResolvedValue({});
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toHaveTextContent('Test User');
-    });
-
-    await userEvent.click(screen.getByText('Logout'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toHaveTextContent('no user');
-    });
-
-    expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(localStorage.getItem('refreshToken')).toBeNull();
-  });
-});
-</file>
-
 <file path="src/shared/lib/authContext.jsx">
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authAPI, usersAPI } from '../api/endpoints';
@@ -3898,10 +3730,6 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
-</file>
-
-<file path="src/test/setup.ts">
-import '@testing-library/jest-dom';
 </file>
 
 <file path="tsconfig.json">

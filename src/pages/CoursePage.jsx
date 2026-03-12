@@ -237,7 +237,7 @@ export default function CoursePage() {
                 <Card
                   hoverable
                   style={{ width: '100%', borderRadius: 10 }}
-                  onClick={() => navigate(`/post/${item.id}`)}
+                  onClick={() => navigate(`/post/${item.id}`, { state: { role: course.role } })}
                 >
                   <div
                     style={{

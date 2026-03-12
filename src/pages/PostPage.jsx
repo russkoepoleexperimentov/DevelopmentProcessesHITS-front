@@ -31,6 +31,7 @@ import {
 import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
 import { useAuth } from '../shared/lib/authContext';
 import dayjs from 'dayjs';
+import { useLocation } from 'react-router-dom';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -416,6 +417,10 @@ export default function PostPage() {
       </div>
     );
   }
+  
+
+  const location = useLocation();
+  const role = location.state?.role;
 
   if (!post) return null;
 
@@ -454,7 +459,7 @@ export default function PostPage() {
               {post.title}
             </Title>
           </div>
-          <Space>
+          {role === 'teacher' && (<Space>
             <Button
               icon={<EditOutlined />}
               onClick={() => navigate(`/post/${id}/edit`)}
@@ -471,7 +476,7 @@ export default function PostPage() {
                 Удалить
               </Button>
             </Popconfirm>
-          </Space>
+          </Space>)}
         </div>
 
         <Paragraph style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>
@@ -537,7 +542,7 @@ export default function PostPage() {
       </Card>
 
       {/* Solution section for students */}
-      {post.type === 'task' && (
+      {post.type === 'task' && role !== 'teacher' && (
         <Card
           title="Ваше решение"
           style={{ borderRadius: 12, marginBottom: 24 }}
