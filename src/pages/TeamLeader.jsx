@@ -4,10 +4,6 @@ import {
   Card,
   Typography,
   Button,
-  Radio,
-  Space,
-  List,
-  Tag,
   message,
   Spin,
   Alert,
@@ -15,23 +11,22 @@ import {
   Statistic,
   Row,
   Col,
+  Tag,
 } from 'antd';
-import { UserOutlined, CrownOutlined, TeamOutlined, CheckOutlined } from '@ant-design/icons';
-import { teamTaskAPI, teamAPI } from '../shared/api/endpoints';
+import { CrownOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
+import { teamTaskAPI, teamAPI, postAPI } from '../shared/api/endpoints';
 
 const { Title, Text } = Typography;
 
 export default function TeamLeader() {
   const { taskId } = useParams();
   const navigate = useNavigate();
+  
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
-  const [selectionType, setSelectionType] = useState('auto');
-  const [selectedLeader, setSelectedLeader] = useState(null);
   const [isCaptain, setIsCaptain] = useState(false);
-  const [votingActive, setVotingActive] = useState(false);
+  const [captainName, setCaptainName] = useState('');
 
   useEffect(() => {
     loadData();
@@ -49,58 +44,21 @@ export default function TeamLeader() {
       const captainStatus = await teamAPI.isCaptain(teamData.id);
       setIsCaptain(captainStatus);
       
+      const captain = memberList.find(m => m.role === 'leader');
+      if (captain) {
+        setCaptainName(captain.credentials);
+      } else if (captainStatus && memberList.length > 0) {
+        const currentUser = memberList.find(m => m.userId === captainStatus);
+        if (currentUser) {
+          setCaptainName(currentUser.credentials);
+        }
+      }
+      
     } catch (error) {
       message.error(error.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleStartVoting = async () => {
-    setSaving(true);
-    try {
-      await teamAPI.startVoting(team.id);
-      setVotingActive(true);
-      message.success('Голосование запущено');
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleVote = async (candidateId) => {
-    setSaving(true);
-    try {
-      await teamAPI.vote(team.id, candidateId);
-      message.success('Голос учтён');
-      loadData();
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTransferCaptain = async () => {
-    if (!selectedLeader) {
-      message.warning('Выберите нового капитана');
-      return;
-    }
-    setSaving(true);
-    try {
-      await teamAPI.transferCaptain(team.id, selectedLeader);
-      message.success('Капитан назначен');
-      loadData();
-    } catch (error) {
-      message.error(error.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleContinue = () => {
-    navigate(`/team/${taskId}/solution`);
   };
 
   if (loading) {
@@ -111,23 +69,15 @@ export default function TeamLeader() {
     );
   }
 
+  const hasCaptain = members.some(m => m.role === 'leader') || isCaptain;
+
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
       <Card style={{ borderRadius: 12 }}>
         <Title level={3}>Выбор лидера команды</Title>
         <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
-          Определите, кто будет руководить командой
+          Первый вступивший в команду становится капитаном
         </Text>
-
-        {isCaptain && (
-          <Alert
-            message="Вы - капитан команды"
-            description="Вы можете назначить нового капитана или запустить голосование."
-            type="info"
-            showIcon
-            style={{ marginBottom: 24 }}
-          />
-        )}
 
         <Row gutter={16} style={{ marginBottom: 24 }}>
           <Col span={12}>
@@ -138,96 +88,29 @@ export default function TeamLeader() {
           </Col>
         </Row>
 
-        <Divider />
-
-        <div style={{ marginBottom: 24 }}>
-          <Text strong>Способ выбора лидера</Text>
-          <Radio.Group
-            value={selectionType}
-            onChange={(e) => setSelectionType(e.target.value)}
-            style={{ marginTop: 8, display: 'block' }}
-          >
-            <Space direction="vertical">
-              <Radio value="auto">🤖 Автоматически (первый участник)</Radio>
-              <Radio value="manual">✋ Ручной выбор</Radio>
-              <Radio value="vote">🗳️ Голосование</Radio>
-            </Space>
-          </Radio.Group>
-        </div>
-
-        {selectionType === 'manual' && (
-          <div style={{ marginBottom: 24 }}>
-            <Text strong>Выберите лидера</Text>
-            <List
-              style={{ marginTop: 8 }}
-              dataSource={members}
-              renderItem={(member) => (
-                <List.Item
-                  style={{
-                    cursor: 'pointer',
-                    background: selectedLeader === member.userId ? '#e6f7ff' : 'transparent',
-                    borderRadius: 8,
-                  }}
-                  onClick={() => setSelectedLeader(member.userId)}
-                >
-                  <List.Item.Meta
-                    avatar={<UserOutlined />}
-                    title={member.credentials}
-                    description={member.userId === team?.captainId ? <Tag color="gold">Капитан</Tag> : null}
-                  />
-                  {selectedLeader === member.userId && <CheckOutlined style={{ color: '#52c41a' }} />}
-                </List.Item>
-              )}
+        {hasCaptain ? (
+          <>
+            <Alert
+              title="Капитан определён"
+              description={`Капитан команды: ${captainName || (isCaptain ? 'Вы' : 'Назначен')}`}
+              type="success"
+              showIcon
+              icon={<CrownOutlined />}
+              style={{ marginBottom: 24 }}
             />
             <Button
               type="primary"
-              style={{ marginTop: 16 }}
-              onClick={handleTransferCaptain}
-              loading={saving}
-              disabled={!selectedLeader}
+              size="large"
+              block
+              onClick={() => navigate(`/team/${taskId}/distribution`)}
             >
-              Назначить лидера
+              Продолжить к распределению
             </Button>
-          </div>
-        )}
-
-        {selectionType === 'vote' && (
-          <div style={{ marginBottom: 24 }}>
-            <Text strong>Голосование</Text>
-            {!votingActive ? (
-              <Button
-                type="primary"
-                style={{ marginTop: 16 }}
-                onClick={handleStartVoting}
-                loading={saving}
-              >
-                Запустить голосование
-              </Button>
-            ) : (
-              <List
-                style={{ marginTop: 8 }}
-                dataSource={members}
-                renderItem={(member) => (
-                  <List.Item
-                    style={{ cursor: 'pointer', borderRadius: 8 }}
-                    onClick={() => handleVote(member.userId)}
-                  >
-                    <List.Item.Meta
-                      avatar={<UserOutlined />}
-                      title={member.credentials}
-                    />
-                    <Button type="link">Голосовать</Button>
-                  </List.Item>
-                )}
-              />
-            )}
-          </div>
-        )}
-
-        {selectionType === 'auto' && (
+          </>
+        ) : (
           <Alert
-            message="Автоматический выбор"
-            description="Лидером будет назначен первый участник команды."
+            title="Ожидание капитана"
+            description="Первый вступивший в команду станет капитаном."
             type="info"
             showIcon
             style={{ marginBottom: 24 }}
@@ -236,10 +119,16 @@ export default function TeamLeader() {
 
         <Divider />
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <Button type="primary" onClick={handleContinue}>
-            Продолжить к решению
-          </Button>
+        <div style={{ marginTop: 16 }}>
+          <Text strong>Участники команды:</Text>
+          <div style={{ marginTop: 8 }}>
+            {members.map((member) => (
+              <Tag key={member.userId} icon={<UserOutlined />} color="blue">
+                {member.credentials}
+                {member.role === 'leader' && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
+              </Tag>
+            ))}
+          </div>
         </div>
       </Card>
     </div>

@@ -108,7 +108,9 @@ export default function TeamSolution() {
         files: files.map(f => f.id),
       });
       message.success('Решение отправлено на проверку');
-      loadData();
+      await loadData();
+      // ✅ После отправки решения переходим на распределение
+      navigate(`/team/${taskId}/distribution`);
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -245,9 +247,6 @@ export default function TeamSolution() {
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between' }}>
           <Button onClick={() => navigate(-1)}>Назад</Button>
-          <Button type="primary" onClick={() => navigate(`/team/${taskId}/grading`)}>
-            Перейти к оценке →
-          </Button>
         </div>
       </Card>
     </div>

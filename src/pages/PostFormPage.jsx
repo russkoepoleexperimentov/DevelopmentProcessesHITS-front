@@ -17,8 +17,8 @@ import {
   Divider,
   Space,
 } from 'antd';
-import { UploadOutlined, FileOutlined, UserAddOutlined } from '@ant-design/icons';
-import { courseAPI, postAPI, filesAPI, teamTaskAPI } from '../shared/api/endpoints';
+import { UploadOutlined, FileOutlined } from '@ant-design/icons';
+import { courseAPI, postAPI, filesAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -33,8 +33,6 @@ export default function PostFormPage() {
   const [postType, setPostType] = useState('post');
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [members, setMembers] = useState([]);
-  const [memberName, setMemberName] = useState('');
   const isEdit = Boolean(postId);
 
   useEffect(() => {
@@ -55,13 +53,11 @@ export default function PostFormPage() {
             maxTeamSize: data.maxTeamSize || 5,
             captainMode: data.captainMode || 'votingAndLottery',
             votingDurationHours: data.votingDurationHours || 24,
+            predefinedTeamsCount: data.predefinedTeamsCount || 2,
           });
           setPostType(data.type);
           if (data.files && data.files.length > 0) {
             setFiles(data.files);
-          }
-          if (data.members) {
-            setMembers(data.members);
           }
         })
         .catch((e) => {
@@ -85,29 +81,10 @@ export default function PostFormPage() {
     return false;
   };
 
-  const addMember = () => {
-    if (!memberName.trim()) return;
-    if (members.includes(memberName.trim())) {
-      message.warning('Участник уже добавлен');
-      return;
-    }
-    setMembers([...members, memberName.trim()]);
-    setMemberName('');
-  };
-
-  const removeMember = (index) => {
-    setMembers(members.filter((_, i) => i !== index));
-  };
-
   const handleSubmit = async (values) => {
-    if (values.type === 'teaM_TASK' && members.length === 0) {
-      message.warning('Добавьте хотя бы одного участника в команду');
-      return;
-    }
-
     setSubmitting(true);
     try {
-      const body = {
+      let body = {
         type: values.type,
         title: values.title,
         text: values.text || '',
@@ -122,16 +99,20 @@ export default function PostFormPage() {
       }
 
       if (values.type === 'teaM_TASK') {
-        body.deadline = values.deadline ? values.deadline.toISOString() : undefined;
-        body.maxScore = values.maxScore ?? 100;
-        body.minTeamSize = values.minTeamSize || 2;
-        body.maxTeamSize = values.maxTeamSize || members.length;
-        body.captainMode = values.captainMode || 'votingAndLottery';
-        body.votingDurationHours = values.votingDurationHours || 24;
-        body.teacherCreatesTeams = false;
-        body.allowJoinTeam = true;
-        body.allowLeaveTeam = true;
-        body.allowStudentTransferCaptain = true;
+        body = {
+          type: 'teaM_TASK',
+          title: values.title,
+          text: values.text || '',
+          files: files.map(f => f.id),
+          minTeamSize: values.minTeamSize || 2,
+          maxTeamSize: values.maxTeamSize || 5,
+          captainMode: values.captainMode || 'votingAndLottery',
+          votingDurationHours: values.votingDurationHours || 24,
+          predefinedTeamsCount: values.predefinedTeamsCount || 2,
+          allowJoinTeam: true,
+          allowLeaveTeam: true,
+          allowStudentTransferCaptain: true,
+        };
       }
 
       if (isEdit) {
@@ -142,14 +123,13 @@ export default function PostFormPage() {
         const res = await courseAPI.createPost(courseId, body);
         message.success('Запись создана');
         
-        if (values.type === 'teaM_TASK' && members.length > 0) {
-          // Сохраняем участников в localStorage для следующих шагов
-          localStorage.setItem('currentTaskMembers', JSON.stringify(members));
+        if (values.type === 'teaM_TASK') {
           localStorage.setItem('currentTaskId', res.id);
           localStorage.setItem('currentTaskTitle', values.title);
+          localStorage.setItem('predefinedTeamsCount', values.predefinedTeamsCount || 2);
+          localStorage.setItem('currentCourseId', courseId);
           
-          // Перенаправляем на страницу распределения
-          navigate(`/team/${res.id}/distribution`);
+          navigate(`/team/${res.id}/select`);
         } else {
           navigate(`/post/${res.id}`);
         }
@@ -187,6 +167,7 @@ export default function PostFormPage() {
             maxTeamSize: 5,
             captainMode: 'votingAndLottery',
             votingDurationHours: 24,
+            predefinedTeamsCount: 2,
           }}
         >
           <Form.Item name="type" label="Тип" rules={[{ required: true }]}>
@@ -228,11 +209,11 @@ export default function PostFormPage() {
 
           {postType === 'teaM_TASK' && (
             <>
-              <Form.Item name="deadline" label="Дедлайн">
-                <DatePicker showTime size="large" style={{ width: '100%' }} format="DD.MM.YYYY HH:mm" />
+              <Form.Item name="minTeamSize" label="Минимальный размер команды">
+                <InputNumber min={1} max={10} style={{ width: '100%' }} />
               </Form.Item>
-              <Form.Item name="maxScore" label="Максимальный балл">
-                <InputNumber size="large" min={1} style={{ width: '100%' }} />
+              <Form.Item name="maxTeamSize" label="Максимальный размер команды">
+                <InputNumber min={1} max={20} style={{ width: '100%' }} />
               </Form.Item>
               <Form.Item name="captainMode" label="Выбор капитана">
                 <Select options={[
@@ -241,23 +222,25 @@ export default function PostFormPage() {
                   { value: 'votingAndLottery', label: 'Голосование' },
                 ]} />
               </Form.Item>
-              <Form.Item name="votingDurationHours" label="Длительность голосования (часов)">
-                <InputNumber min={1} max={168} style={{ width: '100%' }} />
+              <Form.Item name="votingDurationHours" label="Длительность голосования" tooltip="Как долго будет длиться голосование за капитана">
+                <Select
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: 1, label: '⏱️ 1 минута (для теста)' },
+                    { value: 5, label: '⏱️ 5 минут (для теста)' },
+                    { value: 10, label: '⏱️ 10 минут (для теста)' },
+                    { value: 30, label: '⏱️ 30 минут' },
+                    { value: 60, label: '⏱️ 1 час' },
+                    { value: 24, label: '📅 1 день' },
+                    { value: 48, label: '📅 2 дня' },
+                    { value: 72, label: '📅 3 дня' },
+                    { value: 168, label: '📅 7 дней' },
+                  ]}
+                />
               </Form.Item>
-
-              <Divider>Участники команды</Divider>
-              <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
-                <Input placeholder="Имя участника" value={memberName} onChange={(e) => setMemberName(e.target.value)} onPressEnter={addMember} />
-                <Button type="primary" icon={<UserAddOutlined />} onClick={addMember}>Добавить</Button>
-              </Space.Compact>
-              <div style={{ marginBottom: 24 }}>
-                {members.map((member, index) => (
-                  <Tag key={index} closable onClose={() => removeMember(index)} style={{ marginBottom: 8, padding: '4px 8px' }}>
-                    👤 {member}
-                  </Tag>
-                ))}
-                {members.length === 0 && <span style={{ color: '#999' }}>Участники не добавлены</span>}
-              </div>
+              <Form.Item name="predefinedTeamsCount" label="Количество команд" tooltip="Сколько команд будет создано для этого задания">
+                <InputNumber min={1} max={10} style={{ width: '100%' }} />
+              </Form.Item>
             </>
           )}
 

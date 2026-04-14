@@ -16,7 +16,7 @@ import {
   Space,
   Modal,
   Form,
-  Rate,
+  Tooltip,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -24,8 +24,10 @@ import {
   RollbackOutlined,
   EyeOutlined,
   FileOutlined,
+  TeamOutlined,
+  PieChartOutlined,
 } from '@ant-design/icons';
-import { teamTaskAPI, teamSolutionAPI, filesAPI, gradeDistributionAPI } from '../shared/api/endpoints';
+import { teamTaskAPI, filesAPI, gradeDistributionAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -39,6 +41,8 @@ export default function TeamGrading() {
   const [solutions, setSolutions] = useState([]);
   const [selectedSolution, setSelectedSolution] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [distributionModalOpen, setDistributionModalOpen] = useState(false);
+  const [selectedTeamDistribution, setSelectedTeamDistribution] = useState(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -87,6 +91,67 @@ export default function TeamGrading() {
     setModalOpen(true);
   };
 
+  const openDistributionModal = async (teamId, teamName) => {
+    try {
+      const [distribution, allTeams] = await Promise.all([
+        gradeDistributionAPI.get(teamId, taskId),
+        teamTaskAPI.getTeams(taskId),
+      ]);
+      
+      const team = allTeams.find(t => t.id === teamId);
+      
+      // Создаём карту userId -> credentials с учётом разных вариантов полей
+      const userMap = {};
+      team?.members?.forEach(member => {
+        // Пробуем все возможные варианты ID
+        const userId = member.userId || member.id || member.studentId;
+        const userName = member.credentials || member.name || member.fullName;
+        if (userId) {
+          userMap[userId] = userName;
+        }
+        // Также добавляем по всем возможным ключам
+        if (member.userId && member.credentials) {
+          userMap[member.userId] = member.credentials;
+        }
+        if (member.id && member.name) {
+          userMap[member.id] = member.name;
+        }
+      });
+      
+      // Обогащаем entries именами
+      const enrichedEntries = (distribution.entries || []).map(entry => {
+        const userId = entry.userId || entry.studentId || entry.id;
+        let userName = userMap[userId];
+        
+        // Если не нашли по прямому соответствию, пробуем найти по частичному совпадению
+        if (!userName && userId) {
+          const match = Object.entries(userMap).find(([key, val]) => 
+            key === userId || key.includes(userId) || userId.includes(key)
+          );
+          if (match) {
+            userName = match[1];
+          }
+        }
+        
+        return {
+          ...entry,
+          userName: userName || userId || 'Неизвестный участник',
+          originalUserId: userId,
+        };
+      });
+      
+      setSelectedTeamDistribution({
+        teamName: teamName,
+        entries: enrichedEntries,
+        teamRawScore: distribution.teamRawScore || 0,
+      });
+      setDistributionModalOpen(true);
+    } catch (error) {
+      console.error('Ошибка:', error);
+      message.error('Не удалось загрузить распределение');
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'checked': return 'green';
@@ -109,7 +174,19 @@ export default function TeamGrading() {
     {
       title: 'Команда',
       key: 'team',
-      render: (_, record) => record.team?.name || 'Без названия',
+      render: (_, record) => (
+        <Space>
+          <TeamOutlined />
+          <Text strong>{record.team?.name || 'Без названия'}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Решение',
+      dataIndex: 'text',
+      key: 'text',
+      ellipsis: true,
+      render: (text) => text || '—',
     },
     {
       title: 'Статус',
@@ -123,7 +200,7 @@ export default function TeamGrading() {
       title: 'Оценка',
       dataIndex: 'score',
       key: 'score',
-      render: (score) => score !== undefined ? `${score}` : '—',
+      render: (score) => score !== undefined ? `${score} баллов` : '—',
     },
     {
       title: 'Дата',
@@ -136,13 +213,25 @@ export default function TeamGrading() {
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => openReviewModal(record)}
-          >
-            Оценить
-          </Button>
+          <Tooltip title="Оценить решение">
+            <Button
+              type="primary"
+              size="small"
+              icon={<CheckOutlined />}
+              onClick={() => openReviewModal(record)}
+            >
+              Оценить
+            </Button>
+          </Tooltip>
+          <Tooltip title="Посмотреть распределение баллов">
+            <Button
+              size="small"
+              icon={<PieChartOutlined />}
+              onClick={() => openDistributionModal(record.team.id, record.team?.name)}
+            >
+              Распределение
+            </Button>
+          </Tooltip>
         </Space>
       ),
     },
@@ -157,7 +246,7 @@ export default function TeamGrading() {
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} />
         <Title level={3} style={{ margin: 0 }}>Оценка командных решений</Title>
@@ -173,6 +262,7 @@ export default function TeamGrading() {
         />
       </Card>
 
+      {/* Модальное окно для оценки решения */}
       <Modal
         title="Оценить решение"
         open={modalOpen}
@@ -244,6 +334,56 @@ export default function TeamGrading() {
                 </Button>
               </Form.Item>
             </Form>
+          </div>
+        )}
+      </Modal>
+
+      {/* Модальное окно для просмотра распределения баллов */}
+      <Modal
+        title={`Распределение баллов: ${selectedTeamDistribution?.teamName || 'Команда'}`}
+        open={distributionModalOpen}
+        onCancel={() => setDistributionModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setDistributionModalOpen(false)}>
+            Закрыть
+          </Button>,
+        ]}
+        width={500}
+      >
+        {selectedTeamDistribution && (
+          <div>
+            <div style={{ marginBottom: 16, textAlign: 'center' }}>
+              <Tag color="blue" style={{ fontSize: 16, padding: '4px 12px' }}>
+                Общий балл команды: {selectedTeamDistribution.teamRawScore}
+              </Tag>
+            </div>
+            <Divider />
+            <div style={{ marginBottom: 12 }}>
+              <Text strong>Распределение между участниками:</Text>
+            </div>
+            {selectedTeamDistribution.entries.length > 0 ? (
+              selectedTeamDistribution.entries.map((entry, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    marginBottom: 8,
+                    background: '#f5f5f5',
+                    borderRadius: 8,
+                  }}
+                >
+                  <Text>👤 {entry.userName}</Text>
+                  <Text strong style={{ color: '#52c41a' }}>
+                    {entry.points} баллов
+                  </Text>
+                </div>
+              ))
+            ) : (
+              <Text type="secondary">Распределение ещё не настроено</Text>
+            )}
           </div>
         )}
       </Modal>

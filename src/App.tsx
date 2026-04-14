@@ -15,6 +15,7 @@ import SolutionsPage from './pages/SolutionsPage';
 import ProfilePage from './pages/ProfilePage';
 
 // Групповые задачи
+import TeamSelection from './pages/TeamSelection';
 import TeamDistribution from './pages/TeamDistribution';
 import TeamLeader from './pages/TeamLeader';
 import TeamSolution from './pages/TeamSolution';
@@ -118,6 +119,7 @@ function AppContent() {
       <Route path="/post/:postId/solutions" element={<ProtectedRoute><SolutionsPage /></ProtectedRoute>} />
       
       {/* Групповые задачи (Team) */}
+      <Route path="/team/:taskId/select" element={<ProtectedRoute><TeamSelection /></ProtectedRoute>} />
       <Route path="/team/:taskId/distribution" element={<ProtectedRoute><TeamDistribution /></ProtectedRoute>} />
       <Route path="/team/:taskId/leader" element={<ProtectedRoute><TeamLeader /></ProtectedRoute>} />
       <Route path="/team/:taskId/solution" element={<ProtectedRoute><TeamSolution /></ProtectedRoute>} />
