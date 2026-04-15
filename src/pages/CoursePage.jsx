@@ -126,7 +126,7 @@ export default function CoursePage() {
 
   const handleCardClick = (item) => {
     if (item.type === 'teaM_TASK') {
-      navigate(`/team/${item.id}/select`);
+      navigate(`/team-task/${item.id}`); // ← сначала на просмотр
     } else if (item.type === 'task') {
       navigate(`/post/${item.id}`, { state: { role: course.role } });
     } else {

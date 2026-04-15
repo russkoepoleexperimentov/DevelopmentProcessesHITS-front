@@ -54,6 +54,8 @@ export default function PostFormPage() {
             captainMode: data.captainMode || 'votingAndLottery',
             votingDurationHours: data.votingDurationHours || 24,
             predefinedTeamsCount: data.predefinedTeamsCount || 2,
+            allowJoinTeam: data.allowJoinTeam ?? true,
+            allowLeaveTeam: data.allowLeaveTeam ?? true,
           });
           setPostType(data.type);
           if (data.files && data.files.length > 0) {
@@ -109,8 +111,8 @@ export default function PostFormPage() {
           captainMode: values.captainMode || 'votingAndLottery',
           votingDurationHours: values.votingDurationHours || 24,
           predefinedTeamsCount: values.predefinedTeamsCount || 2,
-          allowJoinTeam: true,
-          allowLeaveTeam: true,
+          allowJoinTeam: values.allowJoinTeam ?? true,
+          allowLeaveTeam: values.allowLeaveTeam ?? true,
           allowStudentTransferCaptain: true,
         };
       }
@@ -168,6 +170,8 @@ export default function PostFormPage() {
             captainMode: 'votingAndLottery',
             votingDurationHours: 24,
             predefinedTeamsCount: 2,
+            allowJoinTeam: true,
+            allowLeaveTeam: true,
           }}
         >
           <Form.Item name="type" label="Тип" rules={[{ required: true }]}>
@@ -240,6 +244,26 @@ export default function PostFormPage() {
               </Form.Item>
               <Form.Item name="predefinedTeamsCount" label="Количество команд" tooltip="Сколько команд будет создано для этого задания">
                 <InputNumber min={1} max={10} style={{ width: '100%' }} />
+              </Form.Item>
+              
+              <Divider orientation="left">Настройки команд</Divider>
+              
+              <Form.Item 
+                name="allowJoinTeam" 
+                label="Разрешить студентам самостоятельно вступать в команду" 
+                valuePropName="checked"
+                tooltip="Если выключено, только учитель может добавлять студентов в команды"
+              >
+                <Switch checkedChildren="Да" unCheckedChildren="Нет" />
+              </Form.Item>
+              
+              <Form.Item 
+                name="allowLeaveTeam" 
+                label="Разрешить студентам самостоятельно выходить из команды" 
+                valuePropName="checked"
+                tooltip="Если выключено, только учитель может удалять студентов из команд"
+              >
+                <Switch checkedChildren="Да" unCheckedChildren="Нет" />
               </Form.Item>
             </>
           )}

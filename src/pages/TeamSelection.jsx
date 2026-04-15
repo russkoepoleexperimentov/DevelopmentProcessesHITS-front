@@ -63,7 +63,6 @@ export default function TeamSelection() {
         console.log('Не удалось получить настройки задания');
       }
       
-      // Только для студентов — проверяем, в команде ли он
       if (!teacherStatus) {
         try {
           const myTeamData = await teamTaskAPI.getMyTeam(taskId);
@@ -149,6 +148,14 @@ export default function TeamSelection() {
     }
   };
 
+  // Получить список студентов, которые НЕ состоят в данной команде
+  const getAvailableStudentsForTeam = (team) => {
+    const memberIds = team.members?.map(m => m.userId) || [];
+    return courseStudents.filter(s => 
+      s.role === 'student' && !memberIds.includes(s.id)
+    );
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
@@ -157,7 +164,6 @@ export default function TeamSelection() {
     );
   }
 
-  // Если пользователь уже в команде (студент)
   if (myTeam && !isTeacher) {
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -196,7 +202,6 @@ export default function TeamSelection() {
     );
   }
 
-  // Для учителя - управление командами
   if (isTeacher) {
     return (
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -223,50 +228,54 @@ export default function TeamSelection() {
               showIcon
             />
           ) : (
-            teams.map((team) => (
-              <Card key={team.id} size="small" style={{ marginBottom: 16 }}>
-                <Title level={5}>Команда: {team.name || `#${team.id.slice(0, 8)}`}</Title>
-                
-                <div style={{ marginBottom: 12 }}>
-                  <Text strong>Участники:</Text>
-                  <div style={{ marginTop: 8 }}>
-                    {team.members?.map((member) => (
-                      <Tag
-                        key={member.userId}
-                        closable
-                        onClose={() => removeStudentFromTeam(team.id, member.userId, member.credentials)}
-                        icon={<TeamOutlined />}
-                        color="blue"
-                      >
-                        {member.credentials}
-                      </Tag>
-                    ))}
-                    {(!team.members || team.members.length === 0) && (
-                      <Text type="secondary">Нет участников</Text>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <Text strong>Добавить студента:</Text>
-                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {courseStudents
-                      .filter(s => s.role === 'student')
-                      .filter(s => !team.members?.some(m => m.userId === s.id))
-                      .map((student) => (
-                        <Button
-                          key={student.id}
-                          size="small"
-                          icon={<PlusOutlined />}
-                          onClick={() => addStudentToTeam(team.id, student.id, student.credentials)}
+            teams.map((team) => {
+              const availableStudents = getAvailableStudentsForTeam(team);
+              return (
+                <Card key={team.id} size="small" style={{ marginBottom: 16 }}>
+                  <Title level={5}>Команда: {team.name || `#${team.id.slice(0, 8)}`}</Title>
+                  
+                  <div style={{ marginBottom: 12 }}>
+                    <Text strong>Участники ({team.members?.length || 0}):</Text>
+                    <div style={{ marginTop: 8 }}>
+                      {team.members?.map((member) => (
+                        <Tag
+                          key={member.userId}
+                          closable
+                          onClose={() => removeStudentFromTeam(team.id, member.userId, member.credentials)}
+                          icon={<TeamOutlined />}
+                          color="blue"
                         >
-                          {student.credentials}
-                        </Button>
+                          {member.credentials}
+                        </Tag>
                       ))}
+                      {(!team.members || team.members.length === 0) && (
+                        <Text type="secondary">Нет участников</Text>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Card>
-            ))
+
+                  <div>
+                    <Text strong>Добавить студента:</Text>
+                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {availableStudents.length > 0 ? (
+                        availableStudents.map((student) => (
+                          <Button
+                            key={student.id}
+                            size="small"
+                            icon={<PlusOutlined />}
+                            onClick={() => addStudentToTeam(team.id, student.id, student.credentials)}
+                          >
+                            {student.credentials}
+                          </Button>
+                        ))
+                      ) : (
+                        <Text type="secondary">Нет доступных студентов</Text>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })
           )}
 
           <Button style={{ marginTop: 16 }} onClick={() => navigate(-1)}>
@@ -277,7 +286,6 @@ export default function TeamSelection() {
     );
   }
 
-  // Если команд нет для студента
   if (teams.length === 0) {
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -296,7 +304,6 @@ export default function TeamSelection() {
     );
   }
 
-  // Показываем список команд для студента
   return (
     <div style={{ maxWidth: 600, margin: '0 auto' }}>
       <Card>

@@ -15,6 +15,7 @@ import SolutionsPage from './pages/SolutionsPage';
 import ProfilePage from './pages/ProfilePage';
 
 // Групповые задачи
+import TeamTaskView from './pages/TeamTaskView';
 import TeamSelection from './pages/TeamSelection';
 import TeamDistribution from './pages/TeamDistribution';
 import TeamLeader from './pages/TeamLeader';
@@ -117,6 +118,9 @@ function AppContent() {
       <Route path="/post/:id" element={<ProtectedRoute><PostPage /></ProtectedRoute>} />
       <Route path="/post/:postId/edit" element={<ProtectedRoute><PostFormPage /></ProtectedRoute>} />
       <Route path="/post/:postId/solutions" element={<ProtectedRoute><SolutionsPage /></ProtectedRoute>} />
+      
+      {/* Просмотр группового задания */}
+      <Route path="/team-task/:taskId" element={<ProtectedRoute><TeamTaskView /></ProtectedRoute>} />
       
       {/* Групповые задачи (Team) */}
       <Route path="/team/:taskId/select" element={<ProtectedRoute><TeamSelection /></ProtectedRoute>} />
