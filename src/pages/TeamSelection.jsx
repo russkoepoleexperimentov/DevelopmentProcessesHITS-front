@@ -347,6 +347,18 @@ export default function TeamSelection() {
 
   // Студент уже в команде (другие режимы)
   if (myTeam && !isTeacher) {
+    console.log('=== ОТЛАДКА TeamSelection ===');
+    console.log('captainMode:', captainMode);
+    console.log('is teacherFixed?', captainMode === 'teacherFixed');
+    
+    const targetPath = captainMode === 'teacherFixed' 
+      ? `/team/${taskId}/solution` 
+      : `/team/${taskId}/leader`;
+    
+    const buttonText = captainMode === 'teacherFixed' 
+      ? 'Перейти к решению' 
+      : 'Перейти к выбору капитана';
+    
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         <Card>
@@ -370,8 +382,8 @@ export default function TeamSelection() {
           </div>
 
           <Space style={{ width: '100%', justifyContent: 'center' }}>
-            <Button onClick={() => navigate(`/team/${taskId}/leader`)} type="primary">
-              Перейти к выбору капитана
+            <Button onClick={() => navigate(targetPath)} type="primary">
+              {buttonText}
             </Button>
             {allowLeaveTeam && (
               <Button danger onClick={leaveTeam} loading={joining}>
@@ -446,7 +458,6 @@ export default function TeamSelection() {
                 <Card key={team.id} size="small" style={{ marginBottom: 16 }}>
                   <Title level={5}>Команда: {team.name || `#${team.id.slice(0, 8)}`}</Title>
                   
-                  {/* Текущий капитан */}
                   {hasCaptain && (
                     <div style={{ marginBottom: 12 }}>
                       <Tag color="gold" icon={<CrownOutlined />}>
@@ -455,7 +466,6 @@ export default function TeamSelection() {
                     </div>
                   )}
                   
-                  {/* Назначение капитана (только для teacherFixed) */}
                   {captainMode === 'teacherFixed' && !hasCaptain && team.members?.length > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <Text strong>Назначить капитана:</Text>
@@ -469,7 +479,6 @@ export default function TeamSelection() {
                     </div>
                   )}
                   
-                  {/* Участники */}
                   <div style={{ marginBottom: 12 }}>
                     <Text strong>Участники ({team.members?.length || 0}):</Text>
                     <div style={{ marginTop: 8 }}>
@@ -491,7 +500,6 @@ export default function TeamSelection() {
                     </div>
                   </div>
 
-                  {/* Добавление студентов */}
                   <div>
                     <Text strong>Добавить студента:</Text>
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>

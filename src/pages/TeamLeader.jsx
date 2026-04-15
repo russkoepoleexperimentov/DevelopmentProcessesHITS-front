@@ -255,7 +255,21 @@ export default function TeamLeader() {
   }
 
   const currentCaptain = members.find(m => m.userId === team?.captainId);
-  const hasCaptain = currentCaptain || isCaptain;
+  
+  const hasCaptainFromAPI = !!team?.captainId;
+  const hasCaptainFromMembers = !!currentCaptain;
+  const hasCaptainFromUser = isCaptain;
+  const hasCaptain = hasCaptainFromAPI || hasCaptainFromMembers || hasCaptainFromUser;
+  
+  let captainDisplayName = null;
+  if (currentCaptain) {
+    captainDisplayName = currentCaptain.credentials;
+  } else if (hasCaptainFromAPI && team?.captainId) {
+    const foundCaptain = members.find(m => m.userId === team.captainId);
+    captainDisplayName = foundCaptain?.credentials || 'Назначен';
+  } else if (isCaptain) {
+    captainDisplayName = 'Вы';
+  }
 
   // Режим "первый вступивший"
   if (captainMode === 'firstMember') {
@@ -275,7 +289,7 @@ export default function TeamLeader() {
           </Row>
           {hasCaptain ? (
             <>
-              <Alert type="success" message={`Капитан команды: ${currentCaptain?.credentials || (isCaptain ? 'Вы' : 'Назначен')}`} icon={<CrownOutlined />} style={{ marginTop: 16 }} />
+              <Alert type="success" message={`Капитан команды: ${captainDisplayName || 'Назначен'}`} icon={<CrownOutlined />} style={{ marginTop: 16 }} />
               <Button type="primary" size="large" block style={{ marginTop: 24 }} onClick={() => navigate(`/team/${taskId}/solution`)}>
                 Продолжить к решению
               </Button>
@@ -289,7 +303,7 @@ export default function TeamLeader() {
             {members.map((member) => (
               <Tag key={member.userId} icon={<UserOutlined />} color="blue">
                 {member.credentials}
-                {member.userId === team?.captainId && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
+                {(member.userId === team?.captainId || member.role === 'leader') && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
               </Tag>
             ))}
           </div>
@@ -298,8 +312,11 @@ export default function TeamLeader() {
     );
   }
 
-  // Режим "назначает учитель"
+  // Режим "назначает учитель" — кнопка показывается всегда, если есть участники
   if (captainMode === 'teacherFixed') {
+    // Для этого режима считаем, что капитан назначен учителем, если в команде есть участники
+    const hasTeamMembers = members.length > 0;
+    
     return (
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <Card>
@@ -314,23 +331,40 @@ export default function TeamLeader() {
               <Statistic title="Участников" value={members.length} prefix={<UserOutlined />} />
             </Col>
           </Row>
-          {hasCaptain ? (
+          
+          {hasTeamMembers ? (
             <>
-              <Alert type="success" message={`Капитан команды: ${currentCaptain?.credentials || (isCaptain ? 'Вы' : 'Назначен')}`} icon={<CrownOutlined />} style={{ marginTop: 16 }} />
-              <Button type="primary" size="large" block style={{ marginTop: 24 }} onClick={() => navigate(`/team/${taskId}/solution`)}>
+              <Alert
+                type="success"
+                message="Капитан назначен учителем"
+                icon={<CrownOutlined />}
+                style={{ marginTop: 16 }}
+              />
+              <Button
+                type="primary"
+                size="large"
+                block
+                style={{ marginTop: 24 }}
+                onClick={() => navigate(`/team/${taskId}/solution`)}
+              >
                 Продолжить к решению
               </Button>
             </>
           ) : (
-            <Alert type="info" message="Ожидание назначения капитана" description="Преподаватель назначит капитана команды" style={{ marginTop: 16 }} />
+            <Alert
+              type="info"
+              message="Ожидание участников"
+              description="Добавьте участников в команду для назначения капитана"
+              style={{ marginTop: 16 }}
+            />
           )}
+          
           <Divider />
           <Text strong>Участники команды:</Text>
           <div style={{ marginTop: 8 }}>
             {members.map((member) => (
               <Tag key={member.userId} icon={<UserOutlined />} color="blue">
                 {member.credentials}
-                {member.userId === team?.captainId && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
               </Tag>
             ))}
           </div>
@@ -357,7 +391,7 @@ export default function TeamLeader() {
 
         {hasCaptain ? (
           <>
-            <Alert type="success" message={`Капитан команды: ${currentCaptain?.credentials || (isCaptain ? 'Вы' : 'Назначен')}`} icon={<CrownOutlined />} style={{ marginTop: 16 }} />
+            <Alert type="success" message={`Капитан команды: ${captainDisplayName || 'Назначен'}`} icon={<CrownOutlined />} style={{ marginTop: 16 }} />
             <Button type="primary" size="large" block style={{ marginTop: 24 }} onClick={() => navigate(`/team/${taskId}/solution`)}>
               Продолжить к решению
             </Button>

@@ -12,6 +12,7 @@ import {
   Alert,
   Divider,
   Space,
+  Popconfirm,
 } from 'antd';
 import {
   SendOutlined,
@@ -19,10 +20,9 @@ import {
   UploadOutlined,
   TeamOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons';
 import { teamTaskAPI, filesAPI, teamAPI } from '../shared/api/endpoints';
-import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -107,12 +107,31 @@ export default function TeamSolution() {
       });
       message.success('Решение отправлено на проверку');
       await loadData();
-      navigate(`/team/${taskId}/distribution`);
     } catch (error) {
       message.error(error.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleDeleteSolution = async () => {
+    setSubmitting(true);
+    try {
+      await teamTaskAPI.deleteSolution(taskId);
+      message.success('Решение отозвано');
+      setSolution(null);
+      setSolutionText('');
+      setFiles([]);
+      await loadData();
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleContinueToDistribution = () => {
+    navigate(`/team/${taskId}/distribution`);
   };
 
   const getStatusColor = (status) => {
@@ -141,6 +160,63 @@ export default function TeamSolution() {
     );
   }
 
+  // Решение уже проверено и оценено
+  if (solution?.status === 'checked') {
+    return (
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <Card style={{ borderRadius: 12 }}>
+          <Title level={3}>Командное решение</Title>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
+            Решение проверено и оценено
+          </Text>
+
+          <Alert
+            message="Решение проверено"
+            description={`Ваше решение получило оценку ${solution.score}. Отличная работа!`}
+            type="success"
+            showIcon
+            icon={<CheckCircleOutlined />}
+            style={{ marginBottom: 24 }}
+          />
+
+          <Divider />
+
+          <div style={{ marginBottom: 24 }}>
+            <Text strong>Ваше решение:</Text>
+            <div style={{ marginTop: 8, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
+              <Text>{solutionText || 'Текст решения'}</Text>
+            </div>
+          </div>
+
+          {files.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <Text strong>Файлы:</Text>
+              <div style={{ marginTop: 8 }}>
+                {files.map((file) => (
+                  <Tag key={file.id} icon={<FileOutlined />} color="blue">
+                    {file.name}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Button
+            type="primary"
+            size="large"
+            block
+            onClick={handleContinueToDistribution}
+            style={{ marginBottom: 16 }}
+          >
+            Перейти к распределению баллов
+          </Button>
+
+          <Button onClick={() => navigate(-1)}>Назад</Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <Card style={{ borderRadius: 12 }}>
@@ -151,11 +227,10 @@ export default function TeamSolution() {
 
         <div style={{ marginBottom: 24, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Tag icon={<TeamOutlined />} color="blue">Команда: {team?.name || 'Без названия'}</Tag>
-          <Tag color={getStatusColor(solution?.status)}>
-            {getStatusText(solution?.status)}
-          </Tag>
-          {solution?.score !== undefined && (
-            <Tag color="green">Оценка: {solution.score}</Tag>
+          {solution && (
+            <Tag color={getStatusColor(solution.status)}>
+              {getStatusText(solution.status)}
+            </Tag>
           )}
         </div>
 
@@ -164,16 +239,6 @@ export default function TeamSolution() {
             message="Только капитан может отправлять решение"
             description="Попросите капитана команды отправить решение на проверку."
             type="warning"
-            showIcon
-            style={{ marginBottom: 24 }}
-          />
-        )}
-
-        {solution?.status === 'checked' && (
-          <Alert
-            message="Решение проверено"
-            description={`Ваше решение получило оценку ${solution.score}. Отличная работа!`}
-            type="success"
             showIcon
             style={{ marginBottom: 24 }}
           />
@@ -189,6 +254,16 @@ export default function TeamSolution() {
           />
         )}
 
+        {solution?.status === 'pending' && (
+          <Alert
+            message="Решение на проверке"
+            description="Ваше решение отправлено на проверку учителю. Дождитесь оценки."
+            type="info"
+            showIcon
+            style={{ marginBottom: 24 }}
+          />
+        )}
+
         <Divider />
 
         <div style={{ marginBottom: 24 }}>
@@ -198,7 +273,7 @@ export default function TeamSolution() {
             value={solutionText}
             onChange={(e) => setSolutionText(e.target.value)}
             placeholder="Опишите решение команды..."
-            disabled={!isCaptain && solution?.status !== 'returned'}
+            disabled={!isCaptain || solution?.status === 'pending'}
             style={{ marginTop: 8 }}
           />
         </div>
@@ -206,8 +281,16 @@ export default function TeamSolution() {
         <div style={{ marginBottom: 24 }}>
           <Text strong>Прикреплённые файлы</Text>
           <div style={{ marginTop: 8 }}>
-            <Upload beforeUpload={handleUpload} showUploadList={false} disabled={!isCaptain && solution?.status !== 'returned'}>
-              <Button icon={<UploadOutlined />} loading={uploading} disabled={!isCaptain && solution?.status !== 'returned'}>
+            <Upload 
+              beforeUpload={handleUpload} 
+              showUploadList={false} 
+              disabled={!isCaptain || solution?.status === 'pending'}
+            >
+              <Button 
+                icon={<UploadOutlined />} 
+                loading={uploading} 
+                disabled={!isCaptain || solution?.status === 'pending'}
+              >
                 Загрузить файл
               </Button>
             </Upload>
@@ -215,7 +298,7 @@ export default function TeamSolution() {
               {files.map((file) => (
                 <Tag
                   key={file.id}
-                  closable={isCaptain || solution?.status === 'returned'}
+                  closable={isCaptain && solution?.status !== 'pending' && solution?.status !== 'checked'}
                   onClose={() => removeFile(file.id)}
                   icon={<FileOutlined />}
                   style={{ marginBottom: 8 }}
@@ -227,24 +310,44 @@ export default function TeamSolution() {
           </div>
         </div>
 
-        {(isCaptain || solution?.status === 'returned') && (
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            size="large"
-            block
-            loading={submitting}
-            onClick={handleSubmit}
-          >
-            {solution?.status === 'returned' ? 'Отправить исправленное решение' : 'Отправить на проверку'}
-          </Button>
-        )}
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {isCaptain && solution?.status !== 'pending' && solution?.status !== 'checked' && (
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              size="large"
+              block
+              loading={submitting}
+              onClick={handleSubmit}
+            >
+              {solution?.status === 'returned' ? 'Отправить исправленное решение' : 'Отправить на проверку'}
+            </Button>
+          )}
+
+          {isCaptain && solution?.status === 'pending' && (
+            <Popconfirm
+              title="Отозвать решение?"
+              description="Вы уверены, что хотите отозвать решение? Учитель ещё не проверил его."
+              onConfirm={handleDeleteSolution}
+              okText="Да, отозвать"
+              cancelText="Нет"
+            >
+              <Button
+                danger
+                icon={<RollbackOutlined />}
+                size="large"
+                block
+                loading={submitting}
+              >
+                Отозвать решение
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
 
         <Divider />
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between' }}>
-          <Button onClick={() => navigate(-1)}>Назад</Button>
-        </div>
+        <Button onClick={() => navigate(-1)}>Назад</Button>
       </Card>
     </div>
   );

@@ -82,6 +82,9 @@ export const teamTaskAPI = {
   submitSolution: (taskId, body) =>
     client.put(`/team-task/${taskId}/solution`, body),
 
+  deleteSolution: (taskId) =>
+    client.delete(`/team-task/${taskId}/solution`),
+
   getMySolution: (taskId) =>
     client.get(`/team-task/${taskId}/solution`),
 
@@ -102,6 +105,7 @@ export const teamTaskAPI = {
 // ─── Team Solution API (для удобства) ────────────────────────
 export const teamSolutionAPI = {
   submit: (taskId, body) => client.put(`/team-task/${taskId}/solution`, body),
+  delete: (taskId) => client.delete(`/team-task/${taskId}/solution`),
   getMy: (taskId) => client.get(`/team-task/${taskId}/solution`),
   getAll: (taskId, skip = 0, take = 20, status = '', teamId = '') => {
     let url = `/team-task/${taskId}/solutions?skip=${skip}&take=${take}`;
