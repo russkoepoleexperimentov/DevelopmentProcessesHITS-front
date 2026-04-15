@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, List, message, Spin, Typography, Alert, Tag, Space } from 'antd';
-import { UserAddOutlined, TeamOutlined, CheckCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import { teamTaskAPI, teamAPI, courseAPI } from '../shared/api/endpoints';
+import { Card, Button, List, message, Spin, Typography, Alert, Tag, Space, Select } from 'antd';
+import { UserAddOutlined, TeamOutlined, CheckCircleOutlined, PlusOutlined, DeleteOutlined, ClockCircleOutlined, ReloadOutlined, CrownOutlined } from '@ant-design/icons';
+import { teamTaskAPI, teamAPI, courseAPI, postAPI } from '../shared/api/endpoints';
 
 const { Title, Text } = Typography;
 
@@ -13,15 +13,21 @@ export default function TeamSelection() {
   const [myTeam, setMyTeam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [isTeacher, setIsTeacher] = useState(false);
   const [courseStudents, setCourseStudents] = useState([]);
   const [allowJoinTeam, setAllowJoinTeam] = useState(true);
   const [allowLeaveTeam, setAllowLeaveTeam] = useState(true);
+  const [captainMode, setCaptainMode] = useState('firstMember');
+  const [votingActive, setVotingActive] = useState(false);
+  const [votingDurationHours, setVotingDurationHours] = useState(24);
+  const [checkingVoting, setCheckingVoting] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       const teacherStatus = await checkPermissions();
       await loadData(teacherStatus);
+      await loadTaskSettings();
     };
     init();
   }, [taskId]);
@@ -44,6 +50,16 @@ export default function TeamSelection() {
     } catch (error) {
       console.error('Ошибка получения прав:', error);
       return false;
+    }
+  };
+
+  const loadTaskSettings = async () => {
+    try {
+      const taskData = await postAPI.getById(taskId);
+      setCaptainMode(taskData.captainMode || 'firstMember');
+      setVotingDurationHours(taskData.votingDurationHours || 24);
+    } catch (error) {
+      console.log('Не удалось получить настройки задания');
     }
   };
 
@@ -80,6 +96,74 @@ export default function TeamSelection() {
     }
   };
 
+  const checkVotingStatusFromAPI = async () => {
+    setCheckingVoting(true);
+    try {
+      const teamData = await teamTaskAPI.getMyTeam(taskId);
+      
+      if (teamData.captainId) {
+        message.info('Капитан уже выбран');
+        setVotingActive(false);
+        return;
+      }
+      
+      setVotingActive(true);
+      message.success('Голосование активно! Обновите страницу.');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Ошибка проверки статуса:', error);
+      message.error('Не удалось проверить статус голосования');
+    } finally {
+      setCheckingVoting(false);
+    }
+  };
+
+  const handleStartVoting = async () => {
+    if (!isTeacher) {
+      message.warning('Только учитель может запустить голосование');
+      return;
+    }
+    
+    const targetTeam = teams[0];
+    if (!targetTeam) {
+      message.warning('Нет созданных команд');
+      return;
+    }
+    
+    if (targetTeam.members?.length < 2) {
+      message.warning('Для запуска голосования необходимо минимум 2 участника в команде');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      await teamAPI.startVoting(targetTeam.id);
+      setVotingActive(true);
+      message.success(`Голосование запущено! Длительность: ${votingDurationHours} часов`);
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssignCaptain = async (teamId, userId) => {
+    setSaving(true);
+    try {
+      await teamAPI.setFixedCaptain(teamId, userId);
+      message.success('Капитан назначен');
+      const teacherStatus = isTeacher;
+      await loadData(teacherStatus);
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const joinTeam = async (teamId) => {
     if (!allowJoinTeam) {
       message.error('Учитель запретил самостоятельное вступление в команды');
@@ -92,7 +176,6 @@ export default function TeamSelection() {
       message.success('Вы вступили в команду!');
       const teacherStatus = isTeacher;
       await loadData(teacherStatus);
-      navigate(`/team/${taskId}/leader`);
     } catch (error) {
       message.error(error.message);
     } finally {
@@ -148,7 +231,6 @@ export default function TeamSelection() {
     }
   };
 
-  // Получить список студентов, которые НЕ состоят в данной команде
   const getAvailableStudentsForTeam = (team) => {
     const memberIds = team.members?.map(m => m.userId) || [];
     return courseStudents.filter(s => 
@@ -164,6 +246,106 @@ export default function TeamSelection() {
     );
   }
 
+  // Студент уже в команде, но голосование ещё не активно
+  if (myTeam && !isTeacher && captainMode === 'votingAndLottery' && !votingActive) {
+    return (
+      <div style={{ maxWidth: 600, margin: '0 auto' }}>
+        <Card>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a' }} />
+            <Title level={3} style={{ marginTop: 16 }}>Вы в команде</Title>
+            <Text type="secondary">
+              Вы вступили в команду "{myTeam.name || 'Без названия'}"
+            </Text>
+          </div>
+          
+          <div style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, marginBottom: 24 }}>
+            <Text strong>Участники команды:</Text>
+            <div style={{ marginTop: 8 }}>
+              {myTeam.members?.map((member) => (
+                <Tag key={member.userId} icon={<TeamOutlined />} color="blue">
+                  {member.credentials}
+                </Tag>
+              ))}
+            </div>
+          </div>
+
+          <Alert
+            type="info"
+            message="Ожидание начала голосования"
+            description="Учитель запустит голосование для выбора капитана."
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+
+          <Space style={{ width: '100%', justifyContent: 'center' }} direction="vertical">
+            <Button 
+              type="primary"
+              icon={<ReloadOutlined />}
+              onClick={checkVotingStatusFromAPI}
+              loading={checkingVoting}
+              style={{ width: '100%' }}
+            >
+              Проверить статус голосования
+            </Button>
+            <Button 
+              type="default"
+              onClick={() => navigate(`/team/${taskId}/leader`)}
+              style={{ width: '100%' }}
+            >
+              Перейти к голосованию (принудительно)
+            </Button>
+            {allowLeaveTeam && (
+              <Button danger onClick={leaveTeam} loading={joining}>
+                Покинуть команду
+              </Button>
+            )}
+          </Space>
+        </Card>
+      </div>
+    );
+  }
+
+  // Студент уже в команде и голосование активно
+  if (myTeam && !isTeacher && captainMode === 'votingAndLottery' && votingActive) {
+    return (
+      <div style={{ maxWidth: 600, margin: '0 auto' }}>
+        <Card>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a' }} />
+            <Title level={3} style={{ marginTop: 16 }}>Вы в команде</Title>
+            <Text type="secondary">
+              Вы вступили в команду "{myTeam.name || 'Без названия'}"
+            </Text>
+          </div>
+          
+          <div style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, marginBottom: 24 }}>
+            <Text strong>Участники команды:</Text>
+            <div style={{ marginTop: 8 }}>
+              {myTeam.members?.map((member) => (
+                <Tag key={member.userId} icon={<TeamOutlined />} color="blue">
+                  {member.credentials}
+                </Tag>
+              ))}
+            </div>
+          </div>
+
+          <Space style={{ width: '100%', justifyContent: 'center' }}>
+            <Button onClick={() => navigate(`/team/${taskId}/leader`)} type="primary">
+              Перейти к голосованию
+            </Button>
+            {allowLeaveTeam && (
+              <Button danger onClick={leaveTeam} loading={joining}>
+                Покинуть команду
+              </Button>
+            )}
+          </Space>
+        </Card>
+      </div>
+    );
+  }
+
+  // Студент уже в команде (другие режимы)
   if (myTeam && !isTeacher) {
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -202,6 +384,7 @@ export default function TeamSelection() {
     );
   }
 
+  // Для учителя - управление командами
   if (isTeacher) {
     return (
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -220,6 +403,32 @@ export default function TeamSelection() {
             </Tag>
           </div>
 
+          {captainMode === 'votingAndLottery' && !votingActive && (
+            <Button
+              type="primary"
+              icon={<ClockCircleOutlined />}
+              onClick={handleStartVoting}
+              loading={saving}
+              style={{ marginBottom: 16 }}
+              size="large"
+              block
+            >
+              🗳️ Запустить голосование (на {votingDurationHours === 1 ? '1 минуту' : 
+                votingDurationHours < 60 ? `${votingDurationHours} минут` : 
+                votingDurationHours === 24 ? '24 часа' : `${votingDurationHours} часов`})
+            </Button>
+          )}
+
+          {votingActive && (
+            <Alert
+              message="Голосование активно!"
+              description="Голосование за капитана запущено. Участники могут голосовать."
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
           {teams.length === 0 ? (
             <Alert
               message="Нет созданных команд"
@@ -230,10 +439,37 @@ export default function TeamSelection() {
           ) : (
             teams.map((team) => {
               const availableStudents = getAvailableStudentsForTeam(team);
+              const currentCaptain = team.members?.find(m => m.userId === team.captainId);
+              const hasCaptain = !!currentCaptain;
+              
               return (
                 <Card key={team.id} size="small" style={{ marginBottom: 16 }}>
                   <Title level={5}>Команда: {team.name || `#${team.id.slice(0, 8)}`}</Title>
                   
+                  {/* Текущий капитан */}
+                  {hasCaptain && (
+                    <div style={{ marginBottom: 12 }}>
+                      <Tag color="gold" icon={<CrownOutlined />}>
+                        Капитан: {currentCaptain.credentials}
+                      </Tag>
+                    </div>
+                  )}
+                  
+                  {/* Назначение капитана (только для teacherFixed) */}
+                  {captainMode === 'teacherFixed' && !hasCaptain && team.members?.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <Text strong>Назначить капитана:</Text>
+                      <Select
+                        placeholder="Выберите капитана"
+                        style={{ width: '100%', marginTop: 8 }}
+                        options={team.members.map(m => ({ label: m.credentials, value: m.userId }))}
+                        onSelect={(userId) => handleAssignCaptain(team.id, userId)}
+                        loading={saving}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Участники */}
                   <div style={{ marginBottom: 12 }}>
                     <Text strong>Участники ({team.members?.length || 0}):</Text>
                     <div style={{ marginTop: 8 }}>
@@ -246,6 +482,7 @@ export default function TeamSelection() {
                           color="blue"
                         >
                           {member.credentials}
+                          {member.userId === team.captainId && <CrownOutlined style={{ marginLeft: 4 }} />}
                         </Tag>
                       ))}
                       {(!team.members || team.members.length === 0) && (
@@ -254,6 +491,7 @@ export default function TeamSelection() {
                     </div>
                   </div>
 
+                  {/* Добавление студентов */}
                   <div>
                     <Text strong>Добавить студента:</Text>
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>

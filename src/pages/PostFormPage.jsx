@@ -41,6 +41,12 @@ export default function PostFormPage() {
       postAPI
         .getById(postId)
         .then((data) => {
+          // Для старых задач, где было votingDurationHours, конвертируем в минуты
+          let votingDurationMinutes = data.votingDurationMinutes || 60;
+          if (data.votingDurationHours && !data.votingDurationMinutes) {
+            votingDurationMinutes = data.votingDurationHours * 60;
+          }
+          
           form.setFieldsValue({
             type: data.type,
             title: data.title,
@@ -51,8 +57,8 @@ export default function PostFormPage() {
             solvableAfterDeadline: data.solvableAfterDeadline ?? false,
             minTeamSize: data.minTeamSize || 2,
             maxTeamSize: data.maxTeamSize || 5,
-            captainMode: data.captainMode || 'votingAndLottery',
-            votingDurationHours: data.votingDurationHours || 24,
+            captainMode: data.captainMode || 'firstMember',
+            votingDurationMinutes: votingDurationMinutes,
             predefinedTeamsCount: data.predefinedTeamsCount || 2,
             allowJoinTeam: data.allowJoinTeam ?? true,
             allowLeaveTeam: data.allowLeaveTeam ?? true,
@@ -75,6 +81,7 @@ export default function PostFormPage() {
     try {
       const data = await filesAPI.upload(file);
       setFiles((prev) => [...prev, { id: data.id, name: file.name }]);
+      message.success('Файл загружен');
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -108,8 +115,8 @@ export default function PostFormPage() {
           files: files.map(f => f.id),
           minTeamSize: values.minTeamSize || 2,
           maxTeamSize: values.maxTeamSize || 5,
-          captainMode: values.captainMode || 'votingAndLottery',
-          votingDurationHours: values.votingDurationHours || 24,
+          captainMode: values.captainMode || 'firstMember',
+          votingDurationMinutes: values.votingDurationMinutes || 60,
           predefinedTeamsCount: values.predefinedTeamsCount || 2,
           allowJoinTeam: values.allowJoinTeam ?? true,
           allowLeaveTeam: values.allowLeaveTeam ?? true,
@@ -143,6 +150,23 @@ export default function PostFormPage() {
     }
   };
 
+  // Функция для форматирования длительности в понятный текст
+  const formatDurationLabel = (minutes) => {
+    if (minutes === 1) return '⏱️ 1 минута (для теста)';
+    if (minutes < 60) return `⏱️ ${minutes} минут (для теста)`;
+    if (minutes === 60) return '⏱️ 1 час';
+    if (minutes === 120) return '⏱️ 2 часа';
+    if (minutes === 180) return '⏱️ 3 часа';
+    if (minutes === 240) return '⏱️ 4 часа';
+    if (minutes === 360) return '⏱️ 6 часов';
+    if (minutes === 720) return '⏱️ 12 часов';
+    if (minutes === 1440) return '📅 1 день';
+    if (minutes === 2880) return '📅 2 дня';
+    if (minutes === 4320) return '📅 3 дня';
+    if (minutes === 10080) return '📅 7 дней';
+    return `⏱️ ${minutes} минут`;
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
@@ -167,8 +191,8 @@ export default function PostFormPage() {
             solvableAfterDeadline: false,
             minTeamSize: 2,
             maxTeamSize: 5,
-            captainMode: 'votingAndLottery',
-            votingDurationHours: 24,
+            captainMode: 'firstMember',
+            votingDurationMinutes: 60,
             predefinedTeamsCount: 2,
             allowJoinTeam: true,
             allowLeaveTeam: true,
@@ -219,29 +243,42 @@ export default function PostFormPage() {
               <Form.Item name="maxTeamSize" label="Максимальный размер команды">
                 <InputNumber min={1} max={20} style={{ width: '100%' }} />
               </Form.Item>
-              <Form.Item name="captainMode" label="Выбор капитана">
-                <Select options={[
-                  { value: 'firstMember', label: 'Первый вступивший' },
-                  { value: 'teacherFixed', label: 'Назначает учитель' },
-                  { value: 'votingAndLottery', label: 'Голосование' },
-                ]} />
-              </Form.Item>
-              <Form.Item name="votingDurationHours" label="Длительность голосования" tooltip="Как долго будет длиться голосование за капитана">
+              
+              <Form.Item name="captainMode" label="Выбор капитана" tooltip="Как будет выбран капитан команды">
                 <Select
-                  style={{ width: '100%' }}
+                  size="large"
                   options={[
-                    { value: 1, label: '⏱️ 1 минута (для теста)' },
-                    { value: 5, label: '⏱️ 5 минут (для теста)' },
-                    { value: 10, label: '⏱️ 10 минут (для теста)' },
-                    { value: 30, label: '⏱️ 30 минут' },
-                    { value: 60, label: '⏱️ 1 час' },
-                    { value: 24, label: '📅 1 день' },
-                    { value: 48, label: '📅 2 дня' },
-                    { value: 72, label: '📅 3 дня' },
-                    { value: 168, label: '📅 7 дней' },
+                    { value: 'firstMember', label: '👑 Первый вступивший' },
+                    { value: 'teacherFixed', label: '👨‍🏫 Назначает учитель' },
+                    { value: 'votingAndLottery', label: '🗳️ Голосование' },
                   ]}
                 />
               </Form.Item>
+
+              {form.getFieldValue('captainMode') === 'votingAndLottery' && (
+                <Form.Item name="votingDurationMinutes" label="Длительность голосования" tooltip="Как долго будет длиться голосование за капитана">
+                  <Select
+                    style={{ width: '100%' }}
+                    options={[
+                      { value: 1, label: formatDurationLabel(1) },
+                      { value: 5, label: formatDurationLabel(5) },
+                      { value: 10, label: formatDurationLabel(10) },
+                      { value: 30, label: formatDurationLabel(30) },
+                      { value: 60, label: formatDurationLabel(60) },
+                      { value: 120, label: formatDurationLabel(120) },
+                      { value: 180, label: formatDurationLabel(180) },
+                      { value: 240, label: formatDurationLabel(240) },
+                      { value: 360, label: formatDurationLabel(360) },
+                      { value: 720, label: formatDurationLabel(720) },
+                      { value: 1440, label: formatDurationLabel(1440) },
+                      { value: 2880, label: formatDurationLabel(2880) },
+                      { value: 4320, label: formatDurationLabel(4320) },
+                      { value: 10080, label: formatDurationLabel(10080) },
+                    ]}
+                  />
+                </Form.Item>
+              )}
+
               <Form.Item name="predefinedTeamsCount" label="Количество команд" tooltip="Сколько команд будет создано для этого задания">
                 <InputNumber min={1} max={10} style={{ width: '100%' }} />
               </Form.Item>

@@ -142,7 +142,9 @@ export const teamAPI = {
     client.delete(`/teacher/teams/${teamId}/remove-student/${studentId}`),
 
   setFixedCaptain: (teamId, captainId) =>
-    client.post(`/teacher/teams/${teamId}/fixed-captain`, captainId),
+    client.post(`/teacher/teams/${teamId}/fixed-captain`, `"${captainId}"`, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
 };
 
 // ─── Grade Distribution ──────────────────────────────────────

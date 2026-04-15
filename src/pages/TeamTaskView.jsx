@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Typography, Tag, Descriptions, Button, Spin, message, Divider, Space } from 'antd';
-import { ArrowLeftOutlined, TeamOutlined, FileOutlined, ClockCircleOutlined, EditOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, TeamOutlined, FileOutlined, ClockCircleOutlined, EditOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { postAPI, filesAPI } from '../shared/api/endpoints';
 import { useAuth } from '../shared/lib/authContext';
 import dayjs from 'dayjs';
@@ -46,6 +46,17 @@ export default function TeamTaskView() {
     }
   };
 
+  const formatDuration = (hours) => {
+    if (!hours) return null;
+    if (hours === 1) return '1 минута';
+    if (hours < 60) return `${hours} минут`;
+    if (hours === 24) return '1 день';
+    if (hours === 48) return '2 дня';
+    if (hours === 72) return '3 дня';
+    if (hours === 168) return '7 дней';
+    return `${hours} часов`;
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
@@ -64,7 +75,7 @@ export default function TeamTaskView() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <Button
           type="text"
           icon={<ArrowLeftOutlined />}
@@ -73,15 +84,26 @@ export default function TeamTaskView() {
         >
           Назад
         </Button>
-        {isTeacher && (
-          <Button
-            type="default"
-            icon={<EditOutlined />}
-            onClick={() => navigate(`/post/${taskId}/edit`)}
-          >
-            Редактировать
-          </Button>
-        )}
+        <Space>
+          {isTeacher && task.captainMode === 'votingAndLottery' && (
+            <Button
+              type="primary"
+              icon={<ExperimentOutlined />}
+              onClick={() => navigate(`/team/${taskId}/select`)}
+            >
+              Управление голосованием
+            </Button>
+          )}
+          {isTeacher && (
+            <Button
+              type="default"
+              icon={<EditOutlined />}
+              onClick={() => navigate(`/post/${taskId}/edit`)}
+            >
+              Редактировать
+            </Button>
+          )}
+        </Space>
       </div>
 
       <Card style={{ borderRadius: 12 }}>
@@ -137,24 +159,24 @@ export default function TeamTaskView() {
           )}
           {task.captainMode && (
             <Descriptions.Item label="Выбор капитана">
-              {task.captainMode === 'firstMember' && 'Первый вступивший'}
-              {task.captainMode === 'teacherFixed' && 'Назначает учитель'}
-              {task.captainMode === 'votingAndLottery' && 'Голосование'}
+              {task.captainMode === 'firstMember' && '👑 Первый вступивший'}
+              {task.captainMode === 'teacherFixed' && '👨‍🏫 Назначает учитель'}
+              {task.captainMode === 'votingAndLottery' && '🗳️ Голосование'}
             </Descriptions.Item>
           )}
           {task.votingDurationHours && task.captainMode === 'votingAndLottery' && (
             <Descriptions.Item label="Длительность голосования">
-              {task.votingDurationHours} часов
+              {formatDuration(task.votingDurationHours)}
             </Descriptions.Item>
           )}
           <Descriptions.Item label="Самостоятельное вступление">
             <Tag color={task.allowJoinTeam ? 'green' : 'red'}>
-              {task.allowJoinTeam ? 'Разрешено' : 'Запрещено'}
+              {task.allowJoinTeam ? '✅ Разрешено' : '❌ Запрещено'}
             </Tag>
           </Descriptions.Item>
           <Descriptions.Item label="Самостоятельный выход">
             <Tag color={task.allowLeaveTeam ? 'green' : 'red'}>
-              {task.allowLeaveTeam ? 'Разрешён' : 'Запрещён'}
+              {task.allowLeaveTeam ? '✅ Разрешён' : '❌ Запрещён'}
             </Tag>
           </Descriptions.Item>
         </Descriptions>

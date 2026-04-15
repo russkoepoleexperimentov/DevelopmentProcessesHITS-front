@@ -12,8 +12,6 @@ import {
   Alert,
   Divider,
   Space,
-  Progress,
-  Timeline,
 } from 'antd';
 import {
   SendOutlined,
@@ -26,7 +24,7 @@ import {
 import { teamTaskAPI, filesAPI, teamAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const { TextArea } = Input;
 
 export default function TeamSolution() {
@@ -109,7 +107,6 @@ export default function TeamSolution() {
       });
       message.success('Решение отправлено на проверку');
       await loadData();
-      // ✅ После отправки решения переходим на распределение
       navigate(`/team/${taskId}/distribution`);
     } catch (error) {
       message.error(error.message);
