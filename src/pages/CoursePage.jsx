@@ -25,13 +25,12 @@ import {
   CopyOutlined,
   LogoutOutlined,
   BarChartOutlined,
-  UsergroupAddOutlined,
 } from '@ant-design/icons';
 import { courseAPI } from '../shared/api/endpoints';
 import { useAuth } from '../shared/lib/authContext';
 import dayjs from 'dayjs';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 export default function CoursePage() {
   const { id } = useParams();
@@ -124,40 +123,6 @@ export default function CoursePage() {
     }
   };
 
-  const handleCardClick = (item) => {
-    if (item.type === 'teaM_TASK') {
-      navigate(`/team-task/${item.id}`); // ← сначала на просмотр
-    } else if (item.type === 'task') {
-      navigate(`/post/${item.id}`, { state: { role: course.role } });
-    } else {
-      navigate(`/post/${item.id}`, { state: { role: course.role } });
-    }
-  };
-
-  const getItemIcon = (item) => {
-    if (item.type === 'teaM_TASK') return <UsergroupAddOutlined />;
-    if (item.type === 'task') return <CheckSquareOutlined />;
-    return <FileTextOutlined />;
-  };
-
-  const getItemBackground = (item) => {
-    if (item.type === 'teaM_TASK') return '#e6f7ff';
-    if (item.type === 'task') return '#e8f0fe';
-    return '#fce8e6';
-  };
-
-  const getItemColor = (item) => {
-    if (item.type === 'teaM_TASK') return '#1890ff';
-    if (item.type === 'task') return '#1967d2';
-    return '#d93025';
-  };
-
-  const getItemTag = (item) => {
-    if (item.type === 'teaM_TASK') return { color: 'purple', text: '👥 Групповое задание' };
-    if (item.type === 'task') return { color: 'blue', text: '📝 Задание' };
-    return { color: 'default', text: '📄 Пост' };
-  };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
@@ -170,6 +135,7 @@ export default function CoursePage() {
 
   return (
     <div>
+      {/* Course Header */}
       <Card
         style={{
           borderRadius: 12,
@@ -212,10 +178,16 @@ export default function CoursePage() {
           <Space wrap>
             {isTeacher && (
               <>
-                <Button icon={<PlusOutlined />} onClick={() => navigate(`/course/${id}/new-post`)}>
+                <Button
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate(`/course/${id}/new-post`)}
+                >
                   Новый пост
                 </Button>
-                <Button icon={<TeamOutlined />} onClick={() => navigate(`/course/${id}/members`)}>
+                <Button
+                  icon={<TeamOutlined />}
+                  onClick={() => navigate(`/course/${id}/members`)}
+                >
                   Участники
                 </Button>
                 <Button
@@ -245,6 +217,7 @@ export default function CoursePage() {
         </div>
       </Card>
 
+      {/* Feed */}
       <Title level={4}>Лента курса</Title>
 
       {feedLoading ? (
@@ -259,79 +232,71 @@ export default function CoursePage() {
         <>
           <List
             dataSource={feed}
-            renderItem={(item) => {
-              const itemTag = getItemTag(item);
-              return (
-                <List.Item style={{ padding: 0, marginBottom: 12, border: 'none' }}>
-                  <Card
-                    hoverable
-                    style={{ width: '100%', borderRadius: 10, cursor: 'pointer' }}
-                    onClick={() => handleCardClick(item)}
+            renderItem={(item) => (
+              <List.Item style={{ padding: 0, marginBottom: 12, border: 'none' }}>
+                <Card
+                  hoverable
+                  style={{ width: '100%', borderRadius: 10 }}
+                  onClick={() => navigate(`/post/${item.id}`, { state: { role: course.role } })}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 20,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: getItemBackground(item),
-                          color: getItemColor(item),
-                          fontSize: 18,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {getItemIcon(item)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <Text strong style={{ fontSize: 15 }}>
-                          {item.title}
-                        </Text>
-                        <br />
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {dayjs(item.createdDate).format('DD.MM.YYYY HH:mm')}
-                        </Text>
-                      </div>
-                      <Tag color={itemTag.color}>{itemTag.text}</Tag>
-                      
-                      {/* Кнопка решений для индивидуальных заданий */}
-                      {isTeacher && item.type === 'task' && (
-                        <Tooltip title="Индивидуальные решения">
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<BarChartOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/post/${item.id}/solutions`);
-                            }}
-                          />
-                        </Tooltip>
-                      )}
-                      
-                      {/* Кнопка командных решений для групповых заданий */}
-                      {isTeacher && item.type === 'teaM_TASK' && (
-                        <Tooltip title="Командные решения">
-                          <Button
-                            type="primary"
-                            size="small"
-                            icon={<TeamOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/team/${item.id}/grading`);
-                            }}
-                          >
-                            Оценить
-                          </Button>
-                        </Tooltip>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background:
+                          item.type === 'task' ? '#e8f0fe' : '#fce8e6',
+                        color:
+                          item.type === 'task' ? '#1967d2' : '#d93025',
+                        fontSize: 18,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.type === 'task' ? (
+                        <CheckSquareOutlined />
+                      ) : (
+                        <FileTextOutlined />
                       )}
                     </div>
-                  </Card>
-                </List.Item>
-              );
-            }}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text strong style={{ fontSize: 15 }}>
+                        {item.title}
+                      </Text>
+                      <br />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {dayjs(item.createdDate).format('DD.MM.YYYY HH:mm')}
+                      </Text>
+                    </div>
+                    <Tag color={item.type === 'task' ? 'blue' : 'default'}>
+                      {item.type === 'task' ? 'Задание' : 'Пост'}
+                    </Tag>
+                    {isTeacher && item.type === 'task' && (
+                      <Tooltip title="Решения">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<BarChartOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/post/${item.id}/solutions`);
+                          }}
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
+                </Card>
+              </List.Item>
+            )}
           />
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <Pagination
@@ -345,6 +310,7 @@ export default function CoursePage() {
         </>
       )}
 
+      {/* Edit Modal */}
       <Modal
         title="Редактировать курс"
         open={editOpen}
@@ -352,11 +318,21 @@ export default function CoursePage() {
         footer={null}
       >
         <Form form={editForm} layout="vertical" onFinish={handleEdit}>
-          <Form.Item name="title" label="Название" rules={[{ required: true, message: 'Введите название' }]}>
+          <Form.Item
+            name="title"
+            label="Название"
+            rules={[{ required: true, message: 'Введите название' }]}
+          >
             <Input size="large" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" block size="large" loading={editLoading}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={editLoading}
+            >
               Сохранить
             </Button>
           </Form.Item>

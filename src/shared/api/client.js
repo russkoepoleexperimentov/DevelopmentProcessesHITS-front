@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:5174/api';
+const API_HOST = import.meta.env.VITE_API_HOST || 'http://176.209.147.7:5000/api';
 
 const client = axios.create({
   baseURL: API_HOST,

@@ -13,14 +13,7 @@ import PostFormPage from './pages/PostFormPage';
 import MembersPage from './pages/MembersPage';
 import SolutionsPage from './pages/SolutionsPage';
 import ProfilePage from './pages/ProfilePage';
-
-// Групповые задачи
-import TeamTaskView from './pages/TeamTaskView';
-import TeamSelection from './pages/TeamSelection';
-import TeamDistribution from './pages/TeamDistribution';
-import TeamLeader from './pages/TeamLeader';
-import TeamSolution from './pages/TeamSolution';
-import TeamGrading from './pages/TeamGrading';
+import CriteriaPage from './pages/CriteriaPage';
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -106,10 +99,7 @@ function AppHeader() {
 function AppContent() {
   return (
     <Routes>
-      {/* Auth */}
       <Route path="/auth" element={<GuestRoute><AuthPage /></GuestRoute>} />
-      
-      {/* Основные страницы */}
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/course/:id" element={<ProtectedRoute><CoursePage /></ProtectedRoute>} />
@@ -119,17 +109,10 @@ function AppContent() {
       <Route path="/post/:postId/edit" element={<ProtectedRoute><PostFormPage /></ProtectedRoute>} />
       <Route path="/post/:postId/solutions" element={<ProtectedRoute><SolutionsPage /></ProtectedRoute>} />
       
-      {/* Просмотр группового задания */}
-      <Route path="/team-task/:taskId" element={<ProtectedRoute><TeamTaskView /></ProtectedRoute>} />
+      {/* Маршруты для страницы критериев */}
+      <Route path="/course/:courseId/task/:postId/criteria" element={<ProtectedRoute><CriteriaPage /></ProtectedRoute>} />
+      <Route path="/course/:courseId/task/new/criteria" element={<ProtectedRoute><CriteriaPage /></ProtectedRoute>} />
       
-      {/* Групповые задачи (Team) */}
-      <Route path="/team/:taskId/select" element={<ProtectedRoute><TeamSelection /></ProtectedRoute>} />
-      <Route path="/team/:taskId/distribution" element={<ProtectedRoute><TeamDistribution /></ProtectedRoute>} />
-      <Route path="/team/:taskId/leader" element={<ProtectedRoute><TeamLeader /></ProtectedRoute>} />
-      <Route path="/team/:taskId/solution" element={<ProtectedRoute><TeamSolution /></ProtectedRoute>} />
-      <Route path="/team/:taskId/grading" element={<ProtectedRoute><TeamGrading /></ProtectedRoute>} />
-      
-      {/* 404 */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

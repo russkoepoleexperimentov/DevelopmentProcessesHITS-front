@@ -1,6 +1,6 @@
 // src/pages/PostPage.jsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Typography,
   Card,
@@ -15,6 +15,10 @@ import {
   Space,
   Upload,
   Descriptions,
+  Collapse,
+  Progress,
+  Row,
+  Col,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -27,14 +31,19 @@ import {
   MessageOutlined,
   DownOutlined,
   UpOutlined,
+  UserOutlined,
+  InfoCircleOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
 import { useAuth } from '../shared/lib/authContext';
 import dayjs from 'dayjs';
-import { useLocation } from 'react-router-dom';
+import SelfAssessmentForm from '../components/SelfAssessmentForm';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const { Panel } = Collapse;
 
 /* ──────── Comment component (recursive) ──────── */
 function CommentItem({ comment, onRefreshParent }) {
@@ -244,32 +253,96 @@ function CommentItem({ comment, onRefreshParent }) {
   );
 }
 
+/* ──────── Компонент для отображения детальной оценки ──────── */
+function GradeBreakdown({ breakdown, maxScore }) {
+  if (!breakdown) return null;
+
+  const percent = maxScore > 0 ? (breakdown.finalScore / maxScore) * 100 : 0;
+  const isPassed = breakdown.thresholdApplied === false || breakdown.finalScore > 0;
+
+  return (
+    <Card size="small" style={{ background: '#f0f7ff', marginBottom: 12 }}>
+      <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
+        <Col>
+          <Text strong style={{ fontSize: 16 }}>Детали оценки</Text>
+        </Col>
+        <Col>
+          <Tag color={isPassed ? 'success' : 'error'}>
+            {isPassed ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+            {isPassed ? ' Зачтено' : ' Не зачтено'}
+          </Tag>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]}>
+        <Col span={12}>
+          <div style={{ textAlign: 'center' }}>
+            <Progress
+              type="circle"
+              percent={Math.round(percent)}
+              size={100}
+              strokeColor={percent >= 60 ? '#52c41a' : percent >= 30 ? '#faad14' : '#ff4d4f'}
+              format={() => `${breakdown.finalScore?.toFixed(1)}/${maxScore}`}
+            />
+          </div>
+        </Col>
+        <Col span={12}>
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="Базовая оценка">
+              {breakdown.baseScore?.toFixed(1)}
+            </Descriptions.Item>
+            {breakdown.latePenalty > 0 && (
+              <Descriptions.Item label="Штраф за просрочку">
+                <Text type="danger">-{breakdown.latePenalty.toFixed(1)}</Text>
+              </Descriptions.Item>
+            )}
+            {breakdown.afterQualityCoefficient !== breakdown.baseScore && (
+              <Descriptions.Item label="Коэффициент качества">
+                {breakdown.afterQualityCoefficient?.toFixed(1)}
+              </Descriptions.Item>
+            )}
+            {breakdown.afterBlocking !== breakdown.afterLatePenalty && (
+              <Descriptions.Item label="Блокировка">
+                {breakdown.afterBlocking?.toFixed(1)}
+              </Descriptions.Item>
+            )}
+            {breakdown.thresholdApplied && (
+              <Descriptions.Item label="Порог">
+                <Tag color="orange">{breakdown.thresholdReason || 'Порог применён'}</Tag>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        </Col>
+      </Row>
+    </Card>
+  );
+}
+
 /* ──────── Main PostPage ──────── */
 export default function PostPage() {
+  // ✅ ВСЕ ХУКИ В НАЧАЛЕ (до любых условий)
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const location = useLocation();
+  const role = location.state?.role;
 
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Solution state (students)
   const [solution, setSolution] = useState(null);
   const [solText, setSolText] = useState('');
   const [solFiles, setSolFiles] = useState([]);
   const [solUploading, setSolUploading] = useState(false);
   const [solSubmitting, setSolSubmitting] = useState(false);
-
-  // Solution comments state
+  const [selfAssessment, setSelfAssessment] = useState(null);
   const [solutionComments, setSolutionComments] = useState([]);
   const [solCommentText, setSolCommentText] = useState('');
   const [solCommentLoading, setSolCommentLoading] = useState(false);
-
-  // Comment state for post
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
 
+  // useCallbacks
   const fetchPost = useCallback(async () => {
     try {
       const data = await postAPI.getById(id);
@@ -295,6 +368,9 @@ export default function PostPage() {
     try {
       const data = await solutionAPI.getMine(id);
       setSolution(data);
+      if (data?.selfAssessment) {
+        setSelfAssessment(data.selfAssessment);
+      }
     } catch {
       setSolution(null);
     }
@@ -310,25 +386,25 @@ export default function PostPage() {
     }
   }, [solution]);
 
+  // useEffect
   useEffect(() => {
     fetchPost();
     fetchComments();
   }, [fetchPost, fetchComments]);
 
-  // Fetch student solution if post is a task and user has userSolution
   useEffect(() => {
     if (post?.type === 'task') {
       fetchSolution();
     }
   }, [post, fetchSolution]);
 
-  // Fetch solution comments when solution changes
   useEffect(() => {
     if (solution) {
       fetchSolutionComments();
     }
   }, [solution, fetchSolutionComments]);
 
+  // Handlers
   const handleDeletePost = async () => {
     try {
       await postAPI.delete(id);
@@ -339,7 +415,6 @@ export default function PostPage() {
     }
   };
 
-  /* ── Solution handlers ── */
   const handleUploadSolFile = async (file) => {
     setSolUploading(true);
     try {
@@ -350,19 +425,26 @@ export default function PostPage() {
     } finally {
       setSolUploading(false);
     }
-    return false; // prevent default upload
+    return false;
   };
 
   const handleSubmitSolution = async () => {
     setSolSubmitting(true);
     try {
-      await solutionAPI.submit(id, {
+      const body = {
         text: solText,
         files: solFiles.map((f) => f.id),
-      });
+      };
+      
+      if (selfAssessment) {
+        body.selfAssessment = selfAssessment;
+      }
+      
+      await solutionAPI.submit(id, body);
       message.success('Решение отправлено');
       setSolText('');
       setSolFiles([]);
+      setSelfAssessment(null);
       fetchSolution();
     } catch (e) {
       message.error(e.message);
@@ -376,6 +458,7 @@ export default function PostPage() {
       await solutionAPI.delete(id);
       message.success('Решение удалено');
       setSolution(null);
+      setSelfAssessment(null);
     } catch (e) {
       message.error(e.message);
     }
@@ -395,7 +478,6 @@ export default function PostPage() {
     }
   };
 
-  /* ── Comment handlers ── */
   const handleAddComment = async () => {
     if (!commentText.trim()) return;
     setCommentLoading(true);
@@ -410,6 +492,19 @@ export default function PostPage() {
     }
   };
 
+  // Мемоизированные значения
+  const statusLabels = useMemo(() => ({
+    pending: { text: 'На проверке', color: 'processing' },
+    checked: { text: 'Проверено', color: 'success' },
+    returned: { text: 'Возвращено', color: 'warning' },
+  }), []);
+
+  const hasCriteria = useMemo(() => 
+    post?.criteriaConfig && post.criteriaConfig.weightedCriteria?.length > 0,
+    [post?.criteriaConfig]
+  );
+
+  // Ранние возвраты (после всех хуков)
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
@@ -417,18 +512,8 @@ export default function PostPage() {
       </div>
     );
   }
-  
-
-  const location = useLocation();
-  const role = location.state?.role;
 
   if (!post) return null;
-
-  const statusLabels = {
-    pending: { text: 'На проверке', color: 'processing' },
-    checked: { text: 'Проверено', color: 'success' },
-    returned: { text: 'Возвращено', color: 'warning' },
-  };
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -459,38 +544,34 @@ export default function PostPage() {
               {post.title}
             </Title>
           </div>
-          {role === 'teacher' && (<Space>
-            <Button
-              icon={<EditOutlined />}
-              onClick={() => navigate(`/post/${id}/edit`)}
-            >
-              Редактировать
-            </Button>
-            <Popconfirm
-              title="Удалить запись?"
-              onConfirm={handleDeletePost}
-              okText="Да"
-              cancelText="Нет"
-            >
-              <Button danger icon={<DeleteOutlined />}>
-                Удалить
+          {role === 'teacher' && (
+            <Space>
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => navigate(`/post/${id}/edit`)}
+              >
+                Редактировать
               </Button>
-            </Popconfirm>
-          </Space>)}
+              <Popconfirm
+                title="Удалить запись?"
+                onConfirm={handleDeletePost}
+                okText="Да"
+                cancelText="Нет"
+              >
+                <Button danger icon={<DeleteOutlined />}>
+                  Удалить
+                </Button>
+              </Popconfirm>
+            </Space>
+          )}
         </div>
 
         <Paragraph style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>
           {post.text}
         </Paragraph>
 
-        {/* Task details */}
         {post.type === 'task' && (
-          <Descriptions
-            bordered
-            size="small"
-            column={1}
-            style={{ marginTop: 16 }}
-          >
+          <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }}>
             {post.deadline && (
               <Descriptions.Item label="Дедлайн">
                 <ClockCircleOutlined style={{ marginRight: 6 }} />
@@ -505,9 +586,7 @@ export default function PostPage() {
             {post.taskType && (
               <Descriptions.Item label="Тип">
                 <Tag color={post.taskType === 'mandatory' ? 'red' : 'blue'}>
-                  {post.taskType === 'mandatory'
-                    ? 'Обязательное'
-                    : 'Дополнительное'}
+                  {post.taskType === 'mandatory' ? 'Обязательное' : 'Дополнительное'}
                 </Tag>
               </Descriptions.Item>
             )}
@@ -519,18 +598,12 @@ export default function PostPage() {
           </Descriptions>
         )}
 
-        {/* Post files */}
         {post.files && post.files.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <Text strong>Файлы:</Text>
             <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {post.files.map((f) => (
-                <a
-                  key={f.id}
-                  href={filesAPI.getUrl(f.id)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a key={f.id} href={filesAPI.getUrl(f.id)} target="_blank" rel="noreferrer">
                   <Tag icon={<FileOutlined />} color="blue" style={{ cursor: 'pointer' }}>
                     {f.name}
                   </Tag>
@@ -543,16 +616,11 @@ export default function PostPage() {
 
       {/* Solution section for students */}
       {post.type === 'task' && role !== 'teacher' && (
-        <Card
-          title="Ваше решение"
-          style={{ borderRadius: 12, marginBottom: 24 }}
-        >
+        <Card title="Ваше решение" style={{ borderRadius: 12, marginBottom: 24 }}>
           {solution ? (
             <div>
               <div style={{ marginBottom: 12 }}>
-                <Tag
-                  color={statusLabels[solution.status]?.color || 'default'}
-                >
+                <Tag color={statusLabels[solution.status]?.color || 'default'}>
                   {statusLabels[solution.status]?.text || solution.status}
                 </Tag>
                 {solution.score != null && (
@@ -564,20 +632,33 @@ export default function PostPage() {
                   {dayjs(solution.updatedDate).format('DD.MM.YYYY HH:mm')}
                 </Text>
               </div>
+              
+              {solution.breakdown && (
+                <GradeBreakdown breakdown={solution.breakdown} maxScore={post.maxScore} />
+              )}
+              
+              {solution.selfAssessment && (
+                <Collapse style={{ marginBottom: 12 }} ghost>
+                  <Panel header={<span><UserOutlined /> Ваша самооценка</span>} key="1">
+                    <SelfAssessmentForm
+                      assignmentConfig={post.criteriaConfig}
+                      initialAssessment={solution.selfAssessment}
+                      readOnly={true}
+                    />
+                  </Panel>
+                </Collapse>
+              )}
+              
               {solution.text && (
                 <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
                   {solution.text}
                 </Paragraph>
               )}
+              
               {solution.files && solution.files.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                   {solution.files.map((f) => (
-                    <a
-                      key={f.id}
-                      href={filesAPI.getUrl(f.id)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a key={f.id} href={filesAPI.getUrl(f.id)} target="_blank" rel="noreferrer">
                       <Tag icon={<DownloadOutlined />} color="blue">
                         {f.name}
                       </Tag>
@@ -585,6 +666,7 @@ export default function PostPage() {
                   ))}
                 </div>
               )}
+              
               <Popconfirm
                 title="Удалить решение?"
                 onConfirm={handleDeleteSolution}
@@ -596,7 +678,6 @@ export default function PostPage() {
                 </Button>
               </Popconfirm>
 
-              {/* Solution Comments */}
               <Divider />
               <div>
                 <Title level={5}>
@@ -638,6 +719,19 @@ export default function PostPage() {
             </div>
           ) : (
             <div>
+              {hasCriteria && (
+                <Collapse style={{ marginBottom: 16 }} defaultActiveKey={['1']}>
+                  <Panel header={<span><UserOutlined /> Самооценка работы</span>} key="1">
+                    <SelfAssessmentForm
+                      assignmentConfig={post.criteriaConfig}
+                      initialAssessment={selfAssessment}
+                      onChange={setSelfAssessment}
+                      readOnly={false}
+                    />
+                  </Panel>
+                </Collapse>
+              )}
+              
               <TextArea
                 rows={3}
                 value={solText}
@@ -645,11 +739,9 @@ export default function PostPage() {
                 placeholder="Комментарий к решению..."
                 style={{ marginBottom: 12 }}
               />
+              
               <div style={{ marginBottom: 12 }}>
-                <Upload
-                  beforeUpload={handleUploadSolFile}
-                  showUploadList={false}
-                >
+                <Upload beforeUpload={handleUploadSolFile} showUploadList={false}>
                   <Button loading={solUploading} icon={<FileOutlined />}>
                     Прикрепить файл
                   </Button>
@@ -660,11 +752,7 @@ export default function PostPage() {
                       <Tag
                         key={f.id}
                         closable
-                        onClose={() =>
-                          setSolFiles((prev) =>
-                            prev.filter((x) => x.id !== f.id)
-                          )
-                        }
+                        onClose={() => setSolFiles((prev) => prev.filter((x) => x.id !== f.id))}
                       >
                         {f.name}
                       </Tag>
@@ -672,6 +760,7 @@ export default function PostPage() {
                   </div>
                 )}
               </div>
+              
               <Button
                 type="primary"
                 icon={<SendOutlined />}
@@ -718,11 +807,7 @@ export default function PostPage() {
           <Text type="secondary">Пока нет комментариев</Text>
         ) : (
           comments.map((c) => (
-            <CommentItem
-              key={c.id}
-              comment={c}
-              onRefreshParent={fetchComments}
-            />
+            <CommentItem key={c.id} comment={c} onRefreshParent={fetchComments} />
           ))
         )}
       </Card>

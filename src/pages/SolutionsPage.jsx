@@ -30,6 +30,7 @@ import {
 import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 import CommentItem from '../shared/ui/CommentItem';
+import GradeForm from '../components/GradeForm';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -126,6 +127,42 @@ export default function SolutionsPage() {
     }
   };
 
+  // Функция для предпросмотра оценки
+  const handlePreview = async (evaluation) => {
+    if (!selected) return null;
+    try {
+      const breakdown = await solutionAPI.previewGrade(selected.id, evaluation);
+      return breakdown;
+    } catch (error) {
+      message.error(error.message);
+      return null;
+    }
+  };
+
+  // Функция для отправки оценки через GradeForm
+  const handleSubmitGrade = async (evaluation, score, status, comment) => {
+    if (!selected) return;
+    setReviewLoading(true);
+    try {
+      await solutionAPI.review(selected.id, {
+        score,
+        status,
+        comment: comment || '',
+        evaluation,
+      });
+      message.success('Оценка сохранена');
+      setReviewOpen(false);
+      reviewForm.resetFields();
+      fetchSolutions(page, statusFilter);
+      setDrawerOpen(false);
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  // Старая функция handleReview (оставляем на всякий случай, но используем новую)
   const handleReview = async (values) => {
     if (!selected) return;
     setReviewLoading(true);
@@ -386,10 +423,10 @@ export default function SolutionsPage() {
         )}
       </Drawer>
 
-      {/* Review Modal */}
+      {/* Review Modal - оставляем старую форму и добавляем новую как опцию */}
       <Modal
-        title="Оценить решение"
-        open={reviewOpen}
+        title="Оценить решение (простая форма)"
+        open={reviewOpen && !post?.criteriaConfig}
         onCancel={() => setReviewOpen(false)}
         footer={null}
       >
@@ -455,6 +492,24 @@ export default function SolutionsPage() {
             </Button>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Новый Modal с GradeForm для заданий с критериями */}
+      <Modal
+        title="Оценить решение (расширенная форма)"
+        open={reviewOpen && post?.criteriaConfig}
+        onCancel={() => setReviewOpen(false)}
+        width={750}
+        footer={null}
+        destroyOnClose
+      >
+        <GradeForm
+          assignmentConfig={post?.criteriaConfig}
+          initialEvaluation={selected?.teacherEvaluation}
+          onPreview={handlePreview}
+          onSubmit={handleSubmitGrade}
+          loading={reviewLoading}
+        />
       </Modal>
     </div>
   );
