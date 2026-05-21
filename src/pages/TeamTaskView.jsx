@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Typography, Tag, Descriptions, Button, Spin, message, Divider, Space } from 'antd';
-import { ArrowLeftOutlined, TeamOutlined, FileOutlined, ClockCircleOutlined, EditOutlined, ExperimentOutlined } from '@ant-design/icons';
-import { postAPI, filesAPI } from '../shared/api/endpoints';
-import { useAuth } from '../shared/lib/authContext';
+import { ArrowLeftOutlined, TeamOutlined, FileOutlined, ClockCircleOutlined, EditOutlined, ExperimentOutlined, SendOutlined, LoginOutlined } from '@ant-design/icons';
+import { postAPI, filesAPI, teamTaskAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
+const normalizeCaptainMode = (mode) => mode === 'votingAndLottery' ? 'votingAndLottery' : 'firstMember';
 
 export default function TeamTaskView() {
   const { taskId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [task, setTask] = useState(null);
+  const [myTeam, setMyTeam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isTeacher, setIsTeacher] = useState(false);
 
@@ -28,6 +28,9 @@ export default function TeamTaskView() {
         const { courseAPI } = await import('../shared/api/endpoints');
         const courseData = await courseAPI.getById(courseId);
         setIsTeacher(courseData.role === 'teacher');
+        if (courseData.role !== 'teacher') {
+          loadMyTeam();
+        }
       }
     } catch (error) {
       console.error('Ошибка получения роли:', error);
@@ -43,6 +46,15 @@ export default function TeamTaskView() {
       message.error(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMyTeam = async () => {
+    try {
+      const data = await teamTaskAPI.getMyTeam(taskId);
+      setMyTeam(data);
+    } catch {
+      setMyTeam(null);
     }
   };
 
@@ -85,7 +97,7 @@ export default function TeamTaskView() {
           Назад
         </Button>
         <Space>
-          {isTeacher && task.captainMode === 'votingAndLottery' && (
+          {isTeacher && normalizeCaptainMode(task.captainMode) === 'votingAndLottery' && (
             <Button
               type="primary"
               icon={<ExperimentOutlined />}
@@ -126,6 +138,41 @@ export default function TeamTaskView() {
           </Button>
         </div>
 
+        {!isTeacher && (
+          <Space direction="vertical" style={{ width: '100%', marginTop: 24 }}>
+            {myTeam ? (
+              <>
+                <Button
+                  type="primary"
+                  icon={<SendOutlined />}
+                  onClick={() => navigate(`/team/${taskId}/solution`)}
+                  size="large"
+                  block
+                >
+                  Командное решение
+                </Button>
+                <Button
+                  icon={<TeamOutlined />}
+                  onClick={() => navigate(`/team/${taskId}/select`)}
+                  block
+                >
+                  Моя команда
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="primary"
+                icon={<LoginOutlined />}
+                onClick={() => navigate(`/team/${taskId}/select`)}
+                size="large"
+                block
+              >
+                Вступить или создать команду
+              </Button>
+            )}
+          </Space>
+        )}
+
         <Divider />
 
         {/* Описание */}
@@ -159,12 +206,11 @@ export default function TeamTaskView() {
           )}
           {task.captainMode && (
             <Descriptions.Item label="Выбор капитана">
-              {task.captainMode === 'firstMember' && '👑 Первый вступивший'}
-              {task.captainMode === 'teacherFixed' && '👨‍🏫 Назначает учитель'}
-              {task.captainMode === 'votingAndLottery' && '🗳️ Голосование'}
+              {normalizeCaptainMode(task.captainMode) === 'firstMember' && '👑 Первый вступивший'}
+              {normalizeCaptainMode(task.captainMode) === 'votingAndLottery' && '🗳️ Голосование'}
             </Descriptions.Item>
           )}
-          {task.votingDurationHours && task.captainMode === 'votingAndLottery' && (
+          {task.votingDurationHours && normalizeCaptainMode(task.captainMode) === 'votingAndLottery' && (
             <Descriptions.Item label="Длительность голосования">
               {formatDuration(task.votingDurationHours)}
             </Descriptions.Item>

@@ -28,6 +28,7 @@ import dayjs from 'dayjs';
 const { Title } = Typography;
 const { TextArea } = Input;
 const { Panel } = Collapse;
+const TEAM_TASK_TYPE = 'teaM_TASK';
 
 export default function PostFormPage() {
   const { courseId, postId } = useParams();
@@ -51,8 +52,11 @@ export default function PostFormPage() {
       postAPI
         .getById(postId)
         .then((data) => {
+          const isLoadedTeamTask =
+            data.type === TEAM_TASK_TYPE ||
+            Boolean(data.minTeamSize || data.maxTeamSize || data.captainMode);
           form.setFieldsValue({
-            type: data.type,
+            type: data.type === TEAM_TASK_TYPE ? 'task' : data.type,
             title: data.title,
             text: data.text,
             deadline: data.deadline ? dayjs(data.deadline) : null,
@@ -62,7 +66,7 @@ export default function PostFormPage() {
             // Командные поля
             minTeamSize: data.minTeamSize,
             maxTeamSize: data.maxTeamSize,
-            captainMode: data.captainMode,
+            captainMode: data.captainMode === 'votingAndLottery' ? 'votingAndLottery' : 'firstMember',
             votingDurationHours: data.votingDurationHours,
             predefinedTeamsCount: data.predefinedTeamsCount,
             allowJoinTeam: data.allowJoinTeam ?? true,
@@ -71,9 +75,9 @@ export default function PostFormPage() {
             copyGroupsFromPreviousAssignment: data.copyGroupsFromPreviousAssignment ?? false,
             sourceAssignmentId: data.sourceAssignmentId,
           });
-          setPostType(data.type);
+          setPostType(data.type === TEAM_TASK_TYPE ? 'task' : data.type);
           // Проверяем, командное ли задание
-          if (data.minTeamSize || data.maxTeamSize || data.captainMode) {
+          if (isLoadedTeamTask) {
             setIsTeamTask(true);
           }
           if (data.files && data.files.length > 0) {
@@ -117,7 +121,7 @@ export default function PostFormPage() {
     setSubmitting(true);
     try {
       const body = {
-        type: values.type,
+        type: values.type === 'task' && isTeamTask ? TEAM_TASK_TYPE : values.type,
         title: values.title,
         text: values.text || '',
         files: files.map((f) => f.id),
@@ -133,7 +137,8 @@ export default function PostFormPage() {
         if (isTeamTask) {
           if (values.minTeamSize) body.minTeamSize = values.minTeamSize;
           if (values.maxTeamSize) body.maxTeamSize = values.maxTeamSize;
-          if (values.captainMode) body.captainMode = values.captainMode;
+          const captainMode = values.captainMode === 'votingAndLottery' ? 'votingAndLottery' : 'firstMember';
+          body.captainMode = captainMode;
           if (values.votingDurationHours) body.votingDurationHours = values.votingDurationHours;
           if (values.predefinedTeamsCount) body.predefinedTeamsCount = values.predefinedTeamsCount;
           body.allowJoinTeam = values.allowJoinTeam ?? true;
@@ -167,11 +172,11 @@ export default function PostFormPage() {
       if (isEdit) {
         await postAPI.update(postId, body);
         message.success('Запись обновлена');
-        navigate(`/post/${postId}`);
+        navigate(body.type === TEAM_TASK_TYPE ? `/team/${postId}` : `/post/${postId}`);
       } else {
         const res = await courseAPI.createPost(courseId, body);
         message.success('Запись создана');
-        navigate(`/post/${res.id}`);
+        navigate(body.type === TEAM_TASK_TYPE ? `/team/${res.id}` : `/post/${res.id}`);
       }
     } catch (e) {
       console.error('Submit error:', e);
@@ -214,6 +219,8 @@ export default function PostFormPage() {
             allowJoinTeam: true,
             allowLeaveTeam: true,
             allowStudentTransferCaptain: true,
+            captainMode: 'firstMember',
+            votingDurationHours: 24,
             copyGroupsFromPreviousAssignment: false,
           }}
         >
@@ -319,7 +326,6 @@ export default function PostFormPage() {
                         size="large"
                         options={[
                           { value: 'firstMember', label: 'Первый участник становится капитаном' },
-                          { value: 'teacherFixed', label: 'Капитан назначается преподавателем' },
                           { value: 'votingAndLottery', label: 'Голосование и жеребьёвка' },
                         ]}
                         placeholder="Выберите способ"

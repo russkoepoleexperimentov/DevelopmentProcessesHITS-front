@@ -21,20 +21,29 @@ import {
   TeamOutlined,
   CheckCircleOutlined,
   RollbackOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
 import { teamTaskAPI, filesAPI, teamAPI } from '../shared/api/endpoints';
+import { useAuth } from '../shared/lib/authContext';
+import { convertBackendToFrontend } from '../shared/utils/convertCriteria';
+import SelfAssessmentForm from '../components/SelfAssessmentForm';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
+const normalizeCaptainMode = (mode) => mode === 'votingAndLottery' ? 'votingAndLottery' : 'firstMember';
 
 export default function TeamSolution() {
   const { taskId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [savingSelfAssessment, setSavingSelfAssessment] = useState(false);
   const [team, setTeam] = useState(null);
   const [task, setTask] = useState(null);
   const [solution, setSolution] = useState(null);
+  const [criteriaConfig, setCriteriaConfig] = useState(null);
+  const [selfAssessment, setSelfAssessment] = useState(null);
   const [solutionText, setSolutionText] = useState('');
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -44,17 +53,38 @@ export default function TeamSolution() {
     loadData();
   }, [taskId]);
 
+  const getMemberId = (member) => member?.userId || member?.id || member?.studentId;
+  const idsEqual = (left, right) => left != null && right != null && String(left) === String(right);
+
   const loadData = async () => {
     setLoading(true);
     try {
-      const teamData = await teamTaskAPI.getMyTeam(taskId);
+      let teamData;
+      try {
+        teamData = await teamTaskAPI.getMyTeam(taskId);
+      } catch (error) {
+        setTeam(null);
+        setSolution(null);
+        setIsCaptain(false);
+        return;
+      }
       setTeam(teamData);
-      
-      const captainStatus = await teamAPI.isCaptain(teamData.id);
-      setIsCaptain(captainStatus);
-      
+
       const postData = await teamTaskAPI.getTaskDetails?.(taskId) || { title: 'Групповое задание' };
       setTask(postData);
+      if (postData.criteria?.length > 0) {
+        setCriteriaConfig(convertBackendToFrontend(postData.criteria));
+      } else if (postData.weightedCriteria || postData.bonusPenalties) {
+        setCriteriaConfig(postData);
+      } else {
+        setCriteriaConfig(null);
+      }
+
+      const captainStatus = await teamAPI.isCaptain(teamData.id);
+      const firstMemberCaptain =
+        normalizeCaptainMode(postData.captainMode) === 'firstMember' &&
+        idsEqual(getMemberId(teamData.members?.[0]), user?.id);
+      setIsCaptain(captainStatus || firstMemberCaptain);
       
       try {
         const solutionData = await teamTaskAPI.getMySolution(taskId);
@@ -65,8 +95,16 @@ export default function TeamSolution() {
         if (solutionData.files) {
           setFiles(solutionData.files);
         }
+        const myAssessment = solutionData.selfAssessments?.find(sa => sa.userId === user?.id);
+        setSelfAssessment(
+          myAssessment?.evaluation ||
+          solutionData.selfAssessment?.evaluation ||
+          solutionData.selfAssessment ||
+          null
+        );
       } catch (error) {
         console.log('Решение ещё не отправлено');
+        setSelfAssessment(null);
       }
     } catch (error) {
       message.error(error.message);
@@ -130,6 +168,29 @@ export default function TeamSolution() {
     }
   };
 
+  const handleSaveSelfAssessment = async () => {
+    if (!solution) {
+      message.warning('Сначала должно быть отправлено командное решение');
+      return;
+    }
+
+    if (!selfAssessment) {
+      message.warning('Заполните самооценку перед сохранением');
+      return;
+    }
+
+    setSavingSelfAssessment(true);
+    try {
+      await teamTaskAPI.submitSelfAssessment(taskId, selfAssessment);
+      message.success('Самооценка сохранена');
+      await loadData();
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setSavingSelfAssessment(false);
+    }
+  };
+
   const handleContinueToDistribution = () => {
     navigate(`/team/${taskId}/distribution`);
   };
@@ -152,10 +213,72 @@ export default function TeamSolution() {
     }
   };
 
+  const renderSelfAssessmentSection = (readOnly = false) => {
+    if (!solution || !criteriaConfig) return null;
+
+    return (
+      <>
+        <Divider />
+        <Title level={4}>Самооценка по критериям</Title>
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+          Каждый участник команды заполняет свою самооценку отдельно.
+        </Text>
+
+        {solution.selfAssessments?.length > 0 && (
+          <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {solution.selfAssessments.map((item) => (
+              <Tag key={item.userId} color={item.evaluation ? 'green' : 'default'}>
+                {item.credentials || 'Участник'}
+              </Tag>
+            ))}
+          </div>
+        )}
+
+        <SelfAssessmentForm
+          assignmentConfig={criteriaConfig}
+          initialAssessment={selfAssessment}
+          onChange={setSelfAssessment}
+          readOnly={readOnly}
+        />
+
+        {!readOnly && (
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={savingSelfAssessment}
+            onClick={handleSaveSelfAssessment}
+            style={{ marginTop: 16 }}
+            block
+          >
+            Сохранить самооценку
+          </Button>
+        )}
+      </>
+    );
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
         <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!team) {
+    return (
+      <div style={{ maxWidth: 700, margin: '0 auto' }}>
+        <Alert
+          type="warning"
+          showIcon
+          message="Вы ещё не в команде"
+          description="Чтобы работать над командным решением, сначала выберите или создайте команду."
+          action={
+            <Button type="primary" onClick={() => navigate(`/team/${taskId}/select`)}>
+              Перейти к командам
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -200,6 +323,8 @@ export default function TeamSolution() {
               </div>
             </div>
           )}
+
+          {renderSelfAssessmentSection(true)}
 
           <Button
             type="primary"
@@ -309,6 +434,8 @@ export default function TeamSolution() {
             </div>
           </div>
         </div>
+
+        {renderSelfAssessmentSection(solution?.status === 'checked')}
 
         <Space direction="vertical" style={{ width: '100%' }}>
           {isCaptain && solution?.status !== 'pending' && solution?.status !== 'checked' && (

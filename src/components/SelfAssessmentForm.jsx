@@ -16,29 +16,37 @@ const SelfAssessmentForm = ({
   
   // Состояния для бонусов/штрафов
   const [toggledBonuses, setToggledBonuses] = useState({});
+  const [toggledQuality, setToggledQuality] = useState({});
+  const [toggledBlocking, setToggledBlocking] = useState({});
   
   // Флаг, что форма была изменена
   const [isDirty, setIsDirty] = useState(false);
 
   // Инициализация начальных значений
   useEffect(() => {
-    if (initialAssessment) {
-      if (initialAssessment.weightedValues) {
-        const scores = {};
-        initialAssessment.weightedValues.forEach(wv => {
-          scores[wv.criterionId] = wv.score;
-        });
-        setWeightedScores(scores);
-      }
-      
-      if (initialAssessment.toggledValues) {
-        const toggles = {};
-        initialAssessment.toggledValues.forEach(tv => {
-          toggles[tv.criterionId] = tv.enabled;
-        });
-        setToggledBonuses(toggles);
-      }
+    if (!initialAssessment) {
+      setWeightedScores({});
+      setToggledBonuses({});
+      setToggledQuality({});
+      setToggledBlocking({});
+      setIsDirty(false);
+      return;
     }
+
+    const scores = {};
+    initialAssessment.weightedValues?.forEach(wv => {
+      scores[wv.criterionId] = wv.score;
+    });
+    setWeightedScores(scores);
+    
+    const toggles = {};
+    initialAssessment.toggledValues?.forEach(tv => {
+      toggles[tv.criterionId] = tv.enabled;
+    });
+    setToggledBonuses(toggles);
+    setToggledQuality(toggles);
+    setToggledBlocking(toggles);
+    setIsDirty(false);
   }, [initialAssessment]);
 
   // Сборка объекта самооценки
@@ -66,6 +74,24 @@ const SelfAssessmentForm = ({
       });
     }
 
+    if (assignmentConfig?.qualityCoefficients) {
+      assignmentConfig.qualityCoefficients.forEach(qc => {
+        toggledValues.push({
+          criterionId: qc.id,
+          enabled: toggledQuality[qc.id] || false
+        });
+      });
+    }
+
+    if (assignmentConfig?.blockingModifiers) {
+      assignmentConfig.blockingModifiers.forEach(blocking => {
+        toggledValues.push({
+          criterionId: blocking.id,
+          enabled: toggledBlocking[blocking.id] || false
+        });
+      });
+    }
+
     return { weightedValues, toggledValues };
   };
 
@@ -75,7 +101,7 @@ const SelfAssessmentForm = ({
       const assessment = buildSelfAssessment();
       onChange(assessment);
     }
-  }, [weightedScores, toggledBonuses, isDirty]);
+  }, [weightedScores, toggledBonuses, toggledQuality, toggledBlocking, isDirty]);
 
   // Обновление весового критерия
   const updateWeightedScore = (criterionId, value) => {
@@ -84,8 +110,14 @@ const SelfAssessmentForm = ({
   };
 
   // Обновление тоггла
-  const updateToggle = (criterionId, enabled) => {
-    setToggledBonuses(prev => ({ ...prev, [criterionId]: enabled }));
+  const updateToggle = (criterionId, enabled, type = 'bonus') => {
+    if (type === 'quality') {
+      setToggledQuality(prev => ({ ...prev, [criterionId]: enabled }));
+    } else if (type === 'blocking') {
+      setToggledBlocking(prev => ({ ...prev, [criterionId]: enabled }));
+    } else {
+      setToggledBonuses(prev => ({ ...prev, [criterionId]: enabled }));
+    }
     setIsDirty(true);
   };
 
@@ -114,6 +146,27 @@ const SelfAssessmentForm = ({
       });
     }
 
+    if (assignmentConfig?.qualityCoefficients) {
+      assignmentConfig.qualityCoefficients.forEach(qc => {
+        if (!toggledQuality[qc.id] || maxTotal <= 0) return;
+        const scoreRatio = total / maxTotal;
+        const threshold = qc.threshold > 1 ? qc.threshold / 100 : qc.threshold;
+        if (qc.direction === 'ADD' && scoreRatio > threshold) {
+          total += qc.score;
+        } else if (qc.direction !== 'ADD' && scoreRatio < threshold) {
+          total -= qc.score;
+        }
+      });
+    }
+
+    if (assignmentConfig?.blockingModifiers) {
+      assignmentConfig.blockingModifiers.forEach(blocking => {
+        if (toggledBlocking[blocking.id] && blocking.maxAllowedScore != null) {
+          total = Math.min(total, blocking.maxAllowedScore);
+        }
+      });
+    }
+
     return { total: Math.max(0, total), maxTotal };
   };
 
@@ -125,12 +178,14 @@ const SelfAssessmentForm = ({
     );
   }
 
-  const { weightedCriteria, bonusPenalties } = assignmentConfig;
+  const { weightedCriteria, bonusPenalties, qualityCoefficients, blockingModifiers } = assignmentConfig;
   const preview = calculatePreview();
   const hasWeighted = weightedCriteria && weightedCriteria.length > 0;
   const hasBonuses = bonusPenalties && bonusPenalties.length > 0;
+  const hasQuality = qualityCoefficients && qualityCoefficients.length > 0;
+  const hasBlocking = blockingModifiers && blockingModifiers.length > 0;
 
-  if (!hasWeighted && !hasBonuses) {
+  if (!hasWeighted && !hasBonuses && !hasQuality && !hasBlocking) {
     return (
       <div style={{ padding: 24, textAlign: 'center', background: '#f5f5f5', borderRadius: 8 }}>
         <Text type="secondary">Нет критериев для самооценки</Text>
@@ -190,7 +245,69 @@ const SelfAssessmentForm = ({
                 <Col>
                   <Switch
                     checked={toggledBonuses[bp.id] || false}
-                    onChange={(checked) => updateToggle(bp.id, checked)}
+                    onChange={(checked) => updateToggle(bp.id, checked, 'bonus')}
+                    checkedChildren={<CheckOutlined />}
+                    unCheckedChildren={<CloseOutlined />}
+                    disabled={readOnly}
+                  />
+                </Col>
+              </Row>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {/* Коэффициенты качества */}
+      {hasQuality && (
+        <>
+          <Divider />
+          <Title level={5}>Критерии качества</Title>
+          {qualityCoefficients.map(qc => (
+            <Card key={qc.id} size="small" style={{ marginBottom: 8 }}>
+              <Row align="middle" gutter={16}>
+                <Col flex="auto">
+                  <Text strong>{qc.title}</Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {qc.direction === 'ADD'
+                      ? `бонус +${qc.score} при результате выше ${Math.round((qc.threshold > 1 ? qc.threshold : qc.threshold * 100) || 0)}%`
+                      : `штраф -${qc.score} при результате ниже ${Math.round((qc.threshold > 1 ? qc.threshold : qc.threshold * 100) || 0)}%`}
+                  </Text>
+                </Col>
+                <Col>
+                  <Switch
+                    checked={toggledQuality[qc.id] || false}
+                    onChange={(checked) => updateToggle(qc.id, checked, 'quality')}
+                    checkedChildren={<CheckOutlined />}
+                    unCheckedChildren={<CloseOutlined />}
+                    disabled={readOnly}
+                  />
+                </Col>
+              </Row>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {/* Блокирующие критерии */}
+      {hasBlocking && (
+        <>
+          <Divider />
+          <Title level={5}>Ограничивающие критерии</Title>
+          {blockingModifiers.map(blocking => (
+            <Card key={blocking.id} size="small" style={{ marginBottom: 8 }}>
+              <Row align="middle" gutter={16}>
+                <Col flex="auto">
+                  <Text strong>{blocking.title}</Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    максимум {blocking.maxAllowedScore} баллов при включении
+                  </Text>
+                </Col>
+                <Col>
+                  <Switch
+                    checked={toggledBlocking[blocking.id] || false}
+                    onChange={(checked) => updateToggle(blocking.id, checked, 'blocking')}
                     checkedChildren={<CheckOutlined />}
                     unCheckedChildren={<CloseOutlined />}
                     disabled={readOnly}

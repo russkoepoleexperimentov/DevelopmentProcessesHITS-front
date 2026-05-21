@@ -51,6 +51,10 @@ export default function CoursePage() {
   const isTeacher = course?.role === 'teacher';
   const isAuthor = user && course && user.id === course.authorId;
 
+  useEffect(() => {
+    localStorage.setItem('currentCourseId', id);
+  }, [id]);
+
   const fetchCourse = useCallback(async () => {
     try {
       const data = await courseAPI.getById(id);
@@ -232,12 +236,15 @@ export default function CoursePage() {
         <>
           <List
             dataSource={feed}
-            renderItem={(item) => (
+            renderItem={(item) => {
+              const isTeamItem = item.type === 'teaM_TASK' || item.minTeamSize > 0 || item.maxTeamSize > 0 || item.captainMode;
+              const isTaskItem = item.type === 'task' || item.type === 'teaM_TASK' || isTeamItem;
+              return (
               <List.Item style={{ padding: 0, marginBottom: 12, border: 'none' }}>
                 <Card
                   hoverable
                   style={{ width: '100%', borderRadius: 10 }}
-                  onClick={() => navigate(`/post/${item.id}`, { state: { role: course.role } })}
+                  onClick={() => navigate(isTeamItem ? `/team/${item.id}` : `/post/${item.id}`, { state: { role: course.role } })}
                 >
                   <div
                     style={{
@@ -255,14 +262,14 @@ export default function CoursePage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         background:
-                          item.type === 'task' ? '#e8f0fe' : '#fce8e6',
+                          isTaskItem ? '#e8f0fe' : '#fce8e6',
                         color:
-                          item.type === 'task' ? '#1967d2' : '#d93025',
+                          isTaskItem ? '#1967d2' : '#d93025',
                         fontSize: 18,
                         flexShrink: 0,
                       }}
                     >
-                      {item.type === 'task' ? (
+                      {isTaskItem ? (
                         <CheckSquareOutlined />
                       ) : (
                         <FileTextOutlined />
@@ -277,10 +284,11 @@ export default function CoursePage() {
                         {dayjs(item.createdDate).format('DD.MM.YYYY HH:mm')}
                       </Text>
                     </div>
-                    <Tag color={item.type === 'task' ? 'blue' : 'default'}>
-                      {item.type === 'task' ? 'Задание' : 'Пост'}
+                    <Tag color={isTaskItem ? 'blue' : 'default'}>
+                      {isTaskItem ? 'Задание' : 'Пост'}
                     </Tag>
-                    {isTeacher && item.type === 'task' && (
+                    {isTeamItem && <Tag color="purple">Командное</Tag>}
+                    {isTeacher && isTaskItem && (
                       <Tooltip title="Решения">
                         <Button
                           type="text"
@@ -288,7 +296,7 @@ export default function CoursePage() {
                           icon={<BarChartOutlined />}
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/post/${item.id}/solutions`);
+                            navigate(isTeamItem ? `/team/${item.id}/grading` : `/post/${item.id}/solutions`);
                           }}
                         />
                       </Tooltip>
@@ -296,7 +304,8 @@ export default function CoursePage() {
                   </div>
                 </Card>
               </List.Item>
-            )}
+            );
+            }}
           />
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <Pagination

@@ -118,11 +118,18 @@ export const filesAPI = {
 export const teamAPI = {
   getMyTeam: (assignmentId) => client.get(`/team-task/${assignmentId}/my-team`),
   getTeams: (assignmentId) => client.get(`/team-task/${assignmentId}/teams`),
+  create: (assignmentId, body) => client.post(`/team-task/${assignmentId}/teams`, body),
   join: (teamId) => client.post(`/teams/${teamId}/join`),
   leave: (teamId) => client.post(`/teams/${teamId}/leave`),
   isCaptain: (teamId) => client.get(`/teams/${teamId}/is-captain`),
   transferCaptain: (teamId, toUserId) =>
     client.post(`/teams/${teamId}/transfer-captain/${toUserId}`),
+  setFixedCaptain: (teamId, userId) =>
+    client.post(`/teams/${teamId}/transfer-captain/${userId}`),
+  addStudent: (teamId, userId) =>
+    client.post(`/teams/${teamId}/members/${userId}`),
+  removeStudent: (teamId, userId) =>
+    client.delete(`/teams/${teamId}/members/${userId}`),
   startVoting: (teamId) => client.post(`/teams/${teamId}/start-voting`),
   vote: (teamId, candidateId) =>
     client.post(`/teams/${teamId}/vote/${candidateId}`),
@@ -154,4 +161,22 @@ export const teamSolutionAPI = {
   previewGrade: (solutionId, evaluation) => client.post(`/team-solution/${solutionId}/preview`, { evaluation }),
   submitSelfAssessment: (taskId, evaluation) => client.put(`/team-task/${taskId}/self-assessment`, { evaluation }),
   deleteSelfAssessment: (taskId) => client.delete(`/team-task/${taskId}/self-assessment`),
+};
+
+// ─── Team Task Facade ────────────────────────────────────────
+// Экранные компоненты командного задания работают через единый facade.
+export const teamTaskAPI = {
+  getTaskDetails: (taskId) => postAPI.getById(taskId),
+  getMyTeam: (taskId) => teamAPI.getMyTeam(taskId),
+  getTeams: (taskId) => teamAPI.getTeams(taskId),
+  createTeam: (taskId, name) => teamAPI.create(taskId, { name }),
+  getMySolution: (taskId) => teamSolutionAPI.getMine(taskId),
+  submitSolution: (taskId, body) => teamSolutionAPI.submit(taskId, body),
+  deleteSolution: (taskId) => teamSolutionAPI.delete(taskId),
+  getAllSolutions: (taskId, skip = 0, take = 20, status = '', teamId = '') =>
+    teamSolutionAPI.getAll(taskId, skip, take, status, teamId),
+  reviewSolution: (solutionId, body) => teamSolutionAPI.review(solutionId, body),
+  previewGrade: (solutionId, evaluation) => teamSolutionAPI.previewGrade(solutionId, evaluation),
+  submitSelfAssessment: (taskId, evaluation) => teamSolutionAPI.submitSelfAssessment(taskId, evaluation),
+  deleteSelfAssessment: (taskId) => teamSolutionAPI.deleteSelfAssessment(taskId),
 };

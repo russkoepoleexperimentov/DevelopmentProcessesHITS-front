@@ -42,7 +42,7 @@ import {
   LoginOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
-import { postAPI, solutionAPI, commentAPI, filesAPI, teamAPI, teamSolutionAPI, gradeDistributionAPI } from '../shared/api/endpoints';
+import { postAPI, solutionAPI, commentAPI, filesAPI, teamAPI, teamSolutionAPI, gradeDistributionAPI, courseAPI } from '../shared/api/endpoints';
 import { useAuth } from '../shared/lib/authContext';
 import { convertBackendToFrontend } from '../shared/utils/convertCriteria';
 import dayjs from 'dayjs';
@@ -52,6 +52,7 @@ import GradeDistributionForm from '../components/GradeDistributionForm';
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Panel } = Collapse;
+const normalizeCaptainMode = (mode) => mode === 'votingAndLottery' ? 'votingAndLottery' : 'firstMember';
 
 // ============================================================
 // Компонент комментария (рекурсивный)
@@ -259,10 +260,13 @@ export default function PostPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const location = useLocation();
-  const role = location.state?.role;
+  const [courseRole, setCourseRole] = useState(location.state?.role || null);
+  const role = courseRole;
   
   const isStudent = role === 'student';
   const isTeacher = role === 'teacher';
+  const getMemberId = (member) => member?.userId || member?.id || member?.studentId;
+  const idsEqual = (left, right) => left != null && right != null && String(left) === String(right);
 
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -286,7 +290,7 @@ export default function PostPage() {
 
   // Проверяем, командное ли задание
   const isTeamTask = useMemo(() => {
-    const isTeam = post?.minTeamSize > 0 || post?.maxTeamSize > 0 || post?.captainMode;
+    const isTeam = post?.type === 'teaM_TASK' || post?.minTeamSize > 0 || post?.maxTeamSize > 0 || post?.captainMode;
     console.log('🔍 isTeamTask check:', { 
       minTeamSize: post?.minTeamSize, 
       maxTeamSize: post?.maxTeamSize, 
@@ -298,9 +302,14 @@ export default function PostPage() {
 
   const isCaptain = useMemo(() => {
     if (!myTeam || !user) return false;
-    const member = myTeam.members?.find(m => m.userId === user.id);
-    return member?.role === 'leader';
-  }, [myTeam, user]);
+    const members = myTeam.members || [];
+    const member = members.find(m => idsEqual(getMemberId(m), user.id));
+    const roleCaptain = member?.role === 'leader' || member?.role === 'captain';
+    const firstMemberCaptain =
+      normalizeCaptainMode(post?.captainMode) === 'firstMember' &&
+      idsEqual(getMemberId(members[0]), user.id);
+    return roleCaptain || firstMemberCaptain;
+  }, [myTeam, user, post?.captainMode]);
 
   const fetchPost = useCallback(async () => {
     try {
@@ -318,6 +327,17 @@ export default function PostPage() {
       setLoading(false);
     }
   }, [id, navigate]);
+
+  useEffect(() => {
+    if (courseRole) return;
+    const courseId = localStorage.getItem('currentCourseId');
+    if (!courseId) return;
+
+    courseAPI
+      .getById(courseId)
+      .then((course) => setCourseRole(course.role))
+      .catch(() => {});
+  }, [courseRole]);
 
   const fetchComments = useCallback(async () => {
     try {
@@ -353,14 +373,16 @@ export default function PostPage() {
         setTeamSolution(data);
         if (data?.selfAssessments) {
           const myAssessment = data.selfAssessments.find(sa => sa.userId === user?.id);
-          if (myAssessment) setSelfAssessment(myAssessment.evaluation);
+          setSelfAssessment(myAssessment?.evaluation || null);
+        } else {
+          setSelfAssessment(null);
         }
       } else {
         console.log('🔍 Fetching individual solution for:', id);
         const data = await solutionAPI.getMine(id);
         console.log('📦 Solution data:', data);
         setSolution(data);
-        if (data?.selfAssessment) setSelfAssessment(data.selfAssessment);
+        setSelfAssessment(data?.selfAssessment || null);
       }
     } catch (e) {
       console.log('⚠️ No solution found (this is normal if not submitted yet)');
@@ -396,11 +418,11 @@ export default function PostPage() {
   }, [fetchPost, fetchComments]);
 
   useEffect(() => {
-    if (post?.type === 'task') {
+    if (post?.type === 'task' || post?.type === 'teaM_TASK' || isTeamTask) {
       fetchMyTeam();
       fetchSolution();
     }
-  }, [post, fetchMyTeam, fetchSolution]);
+  }, [post, isTeamTask, fetchMyTeam, fetchSolution]);
 
   useEffect(() => {
     if (solution || teamSolution) {
@@ -439,17 +461,7 @@ export default function PostPage() {
   };
 
   const handleJoinTeam = async () => {
-    if (!myTeam) {
-      console.log('🔍 Joining team for assignment:', id);
-      try {
-        await teamAPI.join(id);
-        message.success('Вы присоединились к команде');
-        fetchMyTeam();
-      } catch (e) {
-        console.error('❌ Error joining team:', e);
-        message.error(e.message);
-      }
-    }
+    navigate(`/team/${id}/select`);
   };
 
   const handleLeaveTeam = async () => {
@@ -575,7 +587,12 @@ export default function PostPage() {
   }), []);
 
   const hasCriteria = useMemo(() => 
-    criteriaConfig?.weightedCriteria?.length > 0,
+    Boolean(
+      criteriaConfig?.weightedCriteria?.length ||
+      criteriaConfig?.bonusPenalties?.length ||
+      criteriaConfig?.qualityCoefficients?.length ||
+      criteriaConfig?.blockingModifiers?.length
+    ),
     [criteriaConfig]
   );
 
@@ -587,6 +604,7 @@ export default function PostPage() {
 
   const currentSolution = isTeamTask ? teamSolution : solution;
   const canSubmit = !currentSolution || currentSolution.status === 'returned';
+  const isAssignment = post?.type === 'task' || post?.type === 'teaM_TASK' || isTeamTask;
 
   if (loading) {
     return (
@@ -607,7 +625,11 @@ export default function PostPage() {
         <Space>
           <Avatar icon={<UserOutlined />} />
           {text}
-          {record.role === 'leader' && <CrownOutlined style={{ color: '#faad14' }} />}
+          {(
+            record.role === 'leader' ||
+            record.role === 'captain' ||
+            (normalizeCaptainMode(post?.captainMode) === 'firstMember' && idsEqual(getMemberId(record), getMemberId(myTeam?.members?.[0])))
+          ) && <CrownOutlined style={{ color: '#faad14' }} />}
         </Space>
       ),
     },
@@ -615,11 +637,17 @@ export default function PostPage() {
       title: 'Роль',
       dataIndex: 'role',
       key: 'role',
-      render: (role) => (
-        <Tag color={role === 'leader' ? 'gold' : 'default'}>
-          {role === 'leader' ? 'Капитан' : 'Участник'}
-        </Tag>
-      ),
+      render: (role, record) => {
+        const isFirstMemberCaptain =
+          normalizeCaptainMode(post?.captainMode) === 'firstMember' &&
+          idsEqual(getMemberId(record), getMemberId(myTeam?.members?.[0]));
+        const isLeader = role === 'leader' || role === 'captain' || isFirstMemberCaptain;
+        return (
+          <Tag color={isLeader ? 'gold' : 'default'}>
+            {isLeader ? 'Капитан' : 'Участник'}
+          </Tag>
+        );
+      },
     },
   ];
 
@@ -633,12 +661,17 @@ export default function PostPage() {
       <Card style={{ borderRadius: 12, marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            <Tag color={post.type === 'task' ? 'blue' : 'default'}>{post.type === 'task' ? 'Задание' : 'Пост'}</Tag>
+            <Tag color={isAssignment ? 'blue' : 'default'}>{isAssignment ? 'Задание' : 'Пост'}</Tag>
             {isTeamTask && <Tag color="purple" icon={<TeamOutlined />}>Командное</Tag>}
             <Title level={3} style={{ margin: '8px 0 0' }}>{post.title}</Title>
           </div>
           {isTeacher && (
             <Space>
+              {isTeamTask && (
+                <Button icon={<TeamOutlined />} onClick={() => navigate(`/team/${id}/grading`)}>
+                  Командные решения
+                </Button>
+              )}
               <Button icon={<EditOutlined />} onClick={() => navigate(`/post/${id}/edit`)}>Редактировать</Button>
               <Popconfirm title="Удалить запись?" onConfirm={handleDeletePost} okText="Да" cancelText="Нет">
                 <Button danger icon={<DeleteOutlined />}>Удалить</Button>
@@ -649,7 +682,7 @@ export default function PostPage() {
 
         <Paragraph style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>{post.text}</Paragraph>
 
-        {post.type === 'task' && (
+        {isAssignment && (
           <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }}>
             {post.deadline && (
               <Descriptions.Item label="Дедлайн">
@@ -671,9 +704,8 @@ export default function PostPage() {
                   {post.minTeamSize || 1} - {post.maxTeamSize || '不限'} человек
                 </Descriptions.Item>
                 <Descriptions.Item label="Режим капитана">
-                  {post.captainMode === 'firstMember' && 'Первый участник становится капитаном'}
-                  {post.captainMode === 'teacherFixed' && 'Капитан назначается преподавателем'}
-                  {post.captainMode === 'votingAndLottery' && 'Голосование и жеребьёвка'}
+                  {normalizeCaptainMode(post.captainMode) === 'firstMember' && 'Первый участник становится капитаном'}
+                  {normalizeCaptainMode(post.captainMode) === 'votingAndLottery' && 'Голосование и жеребьёвка'}
                 </Descriptions.Item>
               </>
             )}
@@ -695,7 +727,7 @@ export default function PostPage() {
       </Card>
 
       {/* Командная информация для студентов */}
-      {post.type === 'task' && isStudent && isTeamTask && (
+      {isAssignment && isStudent && isTeamTask && (
         <Card title="👥 Команда" style={{ marginBottom: 24 }}>
           {myTeam ? (
             <div>
@@ -712,13 +744,21 @@ export default function PostPage() {
                 pagination={false}
                 size="small"
               />
+              <Button
+                type="primary"
+                icon={<TeamOutlined />}
+                onClick={() => navigate(`/team/${id}/leader`)}
+                style={{ marginTop: 12 }}
+              >
+                Открыть командное решение
+              </Button>
             </div>
           ) : (
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary">Вы ещё не в команде</Text>
               <div style={{ marginTop: 12 }}>
                 <Button type="primary" icon={<LoginOutlined />} onClick={handleJoinTeam}>
-                  Присоединиться к команде
+                  Выбрать команду
                 </Button>
               </div>
             </div>
@@ -727,7 +767,7 @@ export default function PostPage() {
       )}
 
       {/* Секция решения - ДЛЯ СТУДЕНТОВ */}
-      {post.type === 'task' && isStudent && (!isTeamTask || myTeam) && (
+      {isAssignment && isStudent && (!isTeamTask || myTeam) && (
         <Card title="Ваше решение" style={{ borderRadius: 12, marginBottom: 24 }}>
           {/* Самооценка для студентов */}
           {hasCriteria && (
@@ -854,7 +894,7 @@ export default function PostPage() {
       )}
 
       {/* Для преподавателя - только просмотр решения */}
-      {post.type === 'task' && isTeacher && currentSolution && (
+      {isAssignment && isTeacher && currentSolution && (
         <Card title={isTeamTask ? "Решение команды" : "Решение студента"} style={{ borderRadius: 12, marginBottom: 24 }}>
           <div style={{ marginBottom: 12 }}>
             <Tag color={statusLabels[currentSolution.status]?.color || 'default'}>

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
-import { ConfigProvider, Layout, Typography, Dropdown, Avatar, Spin, theme } from 'antd';
+import { ConfigProvider, Layout, Typography, Dropdown, Avatar, Spin, theme, App as AntdApp } from 'antd';
 import { AuthProvider, useAuth } from './shared/lib/authContext';
 import { BookOutlined, UserOutlined, LogoutOutlined, HomeOutlined } from '@ant-design/icons';
 
@@ -14,6 +14,12 @@ import MembersPage from './pages/MembersPage';
 import SolutionsPage from './pages/SolutionsPage';
 import ProfilePage from './pages/ProfilePage';
 import CriteriaPage from './pages/CriteriaPage';
+import TeamTaskView from './pages/TeamTaskView';
+import TeamSelection from './pages/TeamSelection';
+import TeamLeader from './pages/TeamLeader';
+import TeamSolution from './pages/TeamSolution';
+import TeamDistribution from './pages/TeamDistribution';
+import TeamGrading from './pages/TeamGrading';
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -108,6 +114,12 @@ function AppContent() {
       <Route path="/post/:id" element={<ProtectedRoute><PostPage /></ProtectedRoute>} />
       <Route path="/post/:postId/edit" element={<ProtectedRoute><PostFormPage /></ProtectedRoute>} />
       <Route path="/post/:postId/solutions" element={<ProtectedRoute><SolutionsPage /></ProtectedRoute>} />
+      <Route path="/team/:taskId" element={<ProtectedRoute><TeamTaskView /></ProtectedRoute>} />
+      <Route path="/team/:taskId/select" element={<ProtectedRoute><TeamSelection /></ProtectedRoute>} />
+      <Route path="/team/:taskId/leader" element={<ProtectedRoute><TeamLeader /></ProtectedRoute>} />
+      <Route path="/team/:taskId/solution" element={<ProtectedRoute><TeamSolution /></ProtectedRoute>} />
+      <Route path="/team/:taskId/distribution" element={<ProtectedRoute><TeamDistribution /></ProtectedRoute>} />
+      <Route path="/team/:taskId/grading" element={<ProtectedRoute><TeamGrading /></ProtectedRoute>} />
       
       {/* Маршруты для страницы критериев */}
       <Route path="/course/:courseId/task/:postId/criteria" element={<ProtectedRoute><CriteriaPage /></ProtectedRoute>} />
@@ -131,16 +143,18 @@ export default function App() {
         algorithm: theme.defaultAlgorithm,
       }}
     >
-      <BrowserRouter>
-        <AuthProvider>
-          <Layout style={{ minHeight: '100vh', background: '#f8f9fa' }}>
-            <AppHeader />
-            <Content style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', width: '100%' }}>
-              <AppContent />
-            </Content>
-          </Layout>
-        </AuthProvider>
-      </BrowserRouter>
+      <AntdApp>
+        <BrowserRouter>
+          <AuthProvider>
+            <Layout style={{ minHeight: '100vh', background: '#f8f9fa' }}>
+              <AppHeader />
+              <Content style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+                <AppContent />
+              </Content>
+            </Layout>
+          </AuthProvider>
+        </BrowserRouter>
+      </AntdApp>
     </ConfigProvider>
   );
 }

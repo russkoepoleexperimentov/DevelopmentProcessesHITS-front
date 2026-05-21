@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -17,6 +17,7 @@ import {
   Modal,
   Form,
   Tooltip,
+  App,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -28,6 +29,8 @@ import {
   PieChartOutlined,
 } from '@ant-design/icons';
 import { teamTaskAPI, filesAPI, gradeDistributionAPI } from '../shared/api/endpoints';
+import { convertFullPostConfig } from '../shared/utils/convertCriteria';
+import GradeForm from '../components/GradeForm';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -36,28 +39,116 @@ const { TextArea } = Input;
 export default function TeamGrading() {
   const { taskId } = useParams();
   const navigate = useNavigate();
+  const { message: messageApi } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [solutions, setSolutions] = useState([]);
+  const [task, setTask] = useState(null);
+  const [gradeFormConfig, setGradeFormConfig] = useState(null);
   const [selectedSolution, setSelectedSolution] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [distributionModalOpen, setDistributionModalOpen] = useState(false);
   const [selectedTeamDistribution, setSelectedTeamDistribution] = useState(null);
-  const [form] = Form.useForm();
+  const [manualReviewInitialValues, setManualReviewInitialValues] = useState({
+    score: 0,
+    status: 'checked',
+    comment: '',
+  });
 
   useEffect(() => {
+    loadTask();
     loadSolutions();
   }, [taskId]);
+
+  const loadTask = async () => {
+    try {
+      const data = await teamTaskAPI.getTaskDetails(taskId);
+      console.log('📦 Task data loaded:', data);
+      setTask(data);
+      if (data.criteria && data.criteria.length > 0) {
+        const config = convertFullPostConfig(data);
+        console.log('🔍 GradeForm config from task:', {
+          weightedCriteria: config?.weightedCriteria?.map(c => ({ id: c.id, title: c.title, maxPoints: c.maxPoints, weight: c.weight })),
+          bonusPenalties: config?.bonusPenalties?.map(b => ({ id: b.id, title: b.title, score: b.score, direction: b.direction })),
+          qualityCoefficients: config?.qualityCoefficients?.map(q => ({ id: q.id, title: q.title })),
+          blockingModifiers: config?.blockingModifiers?.map(b => ({ id: b.id, title: b.title })),
+        });
+        setGradeFormConfig(config);
+      } else {
+        console.log('⚠️ No criteria found in task');
+        setGradeFormConfig(null);
+      }
+    } catch (error) {
+      console.error('❌ Error loading task:', error);
+      messageApi.error(error.message);
+    }
+  };
 
   const loadSolutions = async () => {
     setLoading(true);
     try {
       const data = await teamTaskAPI.getAllSolutions(taskId);
+      console.log('📦 Solutions loaded:', data.records?.length || 0);
       setSolutions(data.records || []);
     } catch (error) {
-      message.error(error.message);
+      console.error('❌ Error loading solutions:', error);
+      messageApi.error(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePreview = async (evaluation) => {
+    if (!selectedSolution) {
+      console.log('⚠️ No selected solution for preview');
+      return null;
+    }
+    
+    console.log('🔍 Preview evaluation:', JSON.stringify(evaluation, null, 2));
+    
+    try {
+      const result = await teamTaskAPI.previewGrade(selectedSolution.id, evaluation);
+      console.log('✅ Preview result:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Team grade preview failed:', error);
+      if (error.response?.data) {
+        console.error('Server error details:', error.response.data);
+      }
+      // Возвращаем заглушку, чтобы форма не ломалась
+      return {
+        baseScore: 0,
+        latePenalty: 0,
+        afterQualityCoefficient: 0,
+        afterLatePenalty: 0,
+        afterBlocking: 0,
+        finalScore: 0,
+        expiredDays: 0,
+        thresholdApplied: false,
+        thresholdReason: null
+      };
+    }
+  };
+
+  const handleSubmitCriteriaReview = async (evaluation, score, status, comment) => {
+    if (!selectedSolution) return;
+    setSubmitting(true);
+    try {
+      console.log('📤 Submitting criteria review:', { solutionId: selectedSolution.id, score, status, evaluation });
+      await teamTaskAPI.reviewSolution(selectedSolution.id, {
+        score,
+        status,
+        comment: comment || '',
+        evaluation,
+      });
+      messageApi.success('Оценка по критериям сохранена');
+      setModalOpen(false);
+      await loadSolutions();
+    } catch (error) {
+      console.error('❌ Error submitting review:', error);
+      messageApi.error(error.message || 'Ошибка при сохранении оценки');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -70,72 +161,66 @@ export default function TeamGrading() {
         status: values.status,
         comment: values.comment || '',
       });
-      message.success('Оценка выставлена');
+      messageApi.success('Оценка выставлена');
       setModalOpen(false);
-      form.resetFields();
-      loadSolutions();
+      await loadSolutions();
     } catch (error) {
-      message.error(error.message);
+      console.error('❌ Error submitting review:', error);
+      messageApi.error(error.message);
     } finally {
       setSubmitting(false);
     }
   };
 
   const openReviewModal = (solution) => {
+    console.log('🔍 Opening review modal for solution:', solution.id);
     setSelectedSolution(solution);
-    form.setFieldsValue({
+    setManualReviewInitialValues({
       score: solution.score || 0,
-      status: solution.status || 'pending',
+      status: solution.status === 'returned' ? 'returned' : 'checked',
       comment: '',
     });
     setModalOpen(true);
   };
 
+  const hasCriteria = useMemo(() =>
+    Boolean(
+      gradeFormConfig?.weightedCriteria?.length ||
+      gradeFormConfig?.bonusPenalties?.length ||
+      gradeFormConfig?.qualityCoefficients?.length ||
+      gradeFormConfig?.blockingModifiers?.length
+    ),
+    [gradeFormConfig]
+  );
+
   const openDistributionModal = async (teamId, teamName) => {
     try {
+      console.log('🔍 Opening distribution modal for team:', teamId);
       const [distribution, allTeams] = await Promise.all([
         gradeDistributionAPI.get(teamId, taskId),
         teamTaskAPI.getTeams(taskId),
       ]);
       
+      console.log('📦 Distribution data:', distribution);
+      console.log('📦 All teams:', allTeams);
+      
       const team = allTeams.find(t => t.id === teamId);
       
-      // Создаём карту userId -> credentials с учётом разных вариантов полей
       const userMap = {};
       team?.members?.forEach(member => {
-        // Пробуем все возможные варианты ID
         const userId = member.userId || member.id || member.studentId;
         const userName = member.credentials || member.name || member.fullName;
-        if (userId) {
+        if (userId && userName) {
           userMap[userId] = userName;
-        }
-        // Также добавляем по всем возможным ключам
-        if (member.userId && member.credentials) {
-          userMap[member.userId] = member.credentials;
-        }
-        if (member.id && member.name) {
-          userMap[member.id] = member.name;
         }
       });
       
-      // Обогащаем entries именами
       const enrichedEntries = (distribution.entries || []).map(entry => {
         const userId = entry.userId || entry.studentId || entry.id;
-        let userName = userMap[userId];
-        
-        // Если не нашли по прямому соответствию, пробуем найти по частичному совпадению
-        if (!userName && userId) {
-          const match = Object.entries(userMap).find(([key, val]) => 
-            key === userId || key.includes(userId) || userId.includes(key)
-          );
-          if (match) {
-            userName = match[1];
-          }
-        }
-        
+        const userName = userMap[userId] || userId || 'Неизвестный участник';
         return {
           ...entry,
-          userName: userName || userId || 'Неизвестный участник',
+          userName,
           originalUserId: userId,
         };
       });
@@ -147,8 +232,8 @@ export default function TeamGrading() {
       });
       setDistributionModalOpen(true);
     } catch (error) {
-      console.error('Ошибка:', error);
-      message.error('Не удалось загрузить распределение');
+      console.error('❌ Error loading distribution:', error);
+      messageApi.error('Не удалось загрузить распределение');
     }
   };
 
@@ -249,7 +334,14 @@ export default function TeamGrading() {
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} />
-        <Title level={3} style={{ margin: 0 }}>Оценка командных решений</Title>
+        <div>
+          <Title level={3} style={{ margin: 0 }}>Оценка командных решений</Title>
+          {task?.title && (
+            <Text type="secondary">
+              {task.title}{task.maxScore ? ` · макс. ${task.maxScore} баллов` : ''}
+            </Text>
+          )}
+        </div>
       </div>
 
       <Card style={{ borderRadius: 12 }}>
@@ -264,11 +356,12 @@ export default function TeamGrading() {
 
       {/* Модальное окно для оценки решения */}
       <Modal
-        title="Оценить решение"
+        title={hasCriteria ? 'Оценить решение по критериям' : 'Оценить решение'}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
-        width={600}
+        width={hasCriteria ? 780 : 600}
+        destroyOnClose
       >
         {selectedSolution && (
           <div>
@@ -301,39 +394,54 @@ export default function TeamGrading() {
 
             <Divider />
 
-            <Form form={form} layout="vertical" onFinish={handleReview}>
-              <Form.Item
-                name="score"
-                label="Оценка"
-                rules={[{ required: true, message: 'Введите оценку' }]}
+            {hasCriteria ? (
+              <GradeForm
+                assignmentConfig={gradeFormConfig}
+                initialEvaluation={selectedSolution.teacherEvaluation}
+                onPreview={handlePreview}
+                onSubmit={handleSubmitCriteriaReview}
+                loading={submitting}
+              />
+            ) : (
+              <Form
+                key={selectedSolution.id}
+                layout="vertical"
+                initialValues={manualReviewInitialValues}
+                onFinish={handleReview}
               >
-                <InputNumber min={0} max={100} style={{ width: '100%' }} size="large" />
-              </Form.Item>
+                <Form.Item
+                  name="score"
+                  label={`Оценка${task?.maxScore ? ` (макс. ${task.maxScore})` : ''}`}
+                  rules={[{ required: true, message: 'Введите оценку' }]}
+                >
+                  <InputNumber min={0} max={task?.maxScore || 100} style={{ width: '100%' }} size="large" />
+                </Form.Item>
 
-              <Form.Item
-                name="status"
-                label="Статус"
-                rules={[{ required: true }]}
-              >
-                <Select
-                  size="large"
-                  options={[
-                    { value: 'checked', label: <span><CheckOutlined style={{ color: '#52c41a' }} /> Принято</span> },
-                    { value: 'returned', label: <span><RollbackOutlined style={{ color: '#faad14' }} /> Вернуть на доработку</span> },
-                  ]}
-                />
-              </Form.Item>
+                <Form.Item
+                  name="status"
+                  label="Статус"
+                  rules={[{ required: true }]}
+                >
+                  <Select
+                    size="large"
+                    options={[
+                      { value: 'checked', label: <span><CheckOutlined style={{ color: '#52c41a' }} /> Принято</span> },
+                      { value: 'returned', label: <span><RollbackOutlined style={{ color: '#faad14' }} /> Вернуть на доработку</span> },
+                    ]}
+                  />
+                </Form.Item>
 
-              <Form.Item name="comment" label="Комментарий">
-                <TextArea rows={3} placeholder="Приватный комментарий..." />
-              </Form.Item>
+                <Form.Item name="comment" label="Комментарий">
+                  <TextArea rows={3} placeholder="Приватный комментарий..." />
+                </Form.Item>
 
-              <Form.Item>
-                <Button type="primary" htmlType="submit" block size="large" loading={submitting}>
-                  Сохранить оценку
-                </Button>
-              </Form.Item>
-            </Form>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" block size="large" loading={submitting}>
+                    Сохранить оценку
+                  </Button>
+                </Form.Item>
+              </Form>
+            )}
           </div>
         )}
       </Modal>

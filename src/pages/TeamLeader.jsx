@@ -19,6 +19,7 @@ import { UserOutlined, CrownOutlined, TeamOutlined, CheckOutlined, ClockCircleOu
 import { teamTaskAPI, teamAPI, postAPI, courseAPI, usersAPI } from '../shared/api/endpoints';
 
 const { Title, Text } = Typography;
+const normalizeCaptainMode = (mode) => mode === 'votingAndLottery' ? 'votingAndLottery' : 'firstMember';
 
 export default function TeamLeader() {
   const { taskId } = useParams();
@@ -64,9 +65,11 @@ export default function TeamLeader() {
   const loadData = async () => {
     setLoading(true);
     try {
+      let userId = null;
       try {
         const userData = await usersAPI.me();
-        setCurrentUserId(userData.id);
+        userId = userData.id;
+        setCurrentUserId(userId);
       } catch (error) {
         console.error('Ошибка получения пользователя:', error);
       }
@@ -92,7 +95,7 @@ export default function TeamLeader() {
       setIsCaptain(captainStatus);
       
       const taskData = await postAPI.getById(taskId);
-      setCaptainMode(taskData.captainMode || 'firstMember');
+      setCaptainMode(normalizeCaptainMode(taskData.captainMode));
       
       const durationMinutes = taskData.votingDurationMinutes || (taskData.votingDurationHours ? taskData.votingDurationHours * 60 : 60);
       setVotingDurationMinutes(durationMinutes);
@@ -107,8 +110,8 @@ export default function TeamLeader() {
         }
       }
       
-      if (currentUserId) {
-        const savedVote = localStorage.getItem(`vote_${taskId}_${teamData.id}_${currentUserId}`);
+      if (userId) {
+        const savedVote = localStorage.getItem(`vote_${taskId}_${teamData.id}_${userId}`);
         if (savedVote) {
           setVotedFor(savedVote);
         }
@@ -254,22 +257,44 @@ export default function TeamLeader() {
     );
   }
 
-  const currentCaptain = members.find(m => m.userId === team?.captainId);
-  
-  const hasCaptainFromAPI = !!team?.captainId;
-  const hasCaptainFromMembers = !!currentCaptain;
-  const hasCaptainFromUser = isCaptain;
-  const hasCaptain = hasCaptainFromAPI || hasCaptainFromMembers || hasCaptainFromUser;
-  
-  let captainDisplayName = null;
-  if (currentCaptain) {
-    captainDisplayName = currentCaptain.credentials;
-  } else if (hasCaptainFromAPI && team?.captainId) {
-    const foundCaptain = members.find(m => m.userId === team.captainId);
-    captainDisplayName = foundCaptain?.credentials || 'Назначен';
-  } else if (isCaptain) {
-    captainDisplayName = 'Вы';
+  if (!team) {
+    return (
+      <div style={{ maxWidth: 700, margin: '0 auto' }}>
+        <Alert
+          type="warning"
+          showIcon
+          message="Вы ещё не в команде"
+          description="Сначала выберите команду для этого задания."
+          action={
+            <Button type="primary" onClick={() => navigate(`/team/${taskId}/select`)}>
+              Выбрать команду
+            </Button>
+          }
+        />
+      </div>
+    );
   }
+
+  const getMemberId = (member) => member?.userId || member?.id || member?.studentId;
+  const getMemberName = (member) => member?.credentials || member?.name || member?.fullName || 'Участник';
+  const idsEqual = (left, right) => left != null && right != null && String(left) === String(right);
+  const apiCaptainId = team?.captainId || team?.leaderId || team?.captain?.id || team?.leader?.id;
+  const currentCaptain = members.find(m => idsEqual(getMemberId(m), apiCaptainId));
+  const roleCaptain = members.find(m => m.role === 'leader' || m.role === 'captain');
+  const firstMemberCaptain = captainMode === 'firstMember' ? members[0] : null;
+  const captainMember = currentCaptain || roleCaptain || firstMemberCaptain;
+  const hasCaptain = !!captainMember || isCaptain;
+  const captainDisplayName = captainMember ? getMemberName(captainMember) : (isCaptain ? 'Вы' : null);
+  const isMemberCaptain = (member) => {
+    const memberId = getMemberId(member);
+    const captainId = getMemberId(captainMember);
+    return (
+      idsEqual(memberId, apiCaptainId) ||
+      idsEqual(memberId, captainId) ||
+      member.role === 'leader' ||
+      member.role === 'captain'
+    );
+  };
 
   // Режим "первый вступивший"
   if (captainMode === 'firstMember') {
@@ -303,7 +328,7 @@ export default function TeamLeader() {
             {members.map((member) => (
               <Tag key={member.userId} icon={<UserOutlined />} color="blue">
                 {member.credentials}
-                {(member.userId === team?.captainId || member.role === 'leader') && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
+                {isMemberCaptain(member) && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
               </Tag>
             ))}
           </div>
@@ -312,11 +337,8 @@ export default function TeamLeader() {
     );
   }
 
-  // Режим "назначает учитель" — кнопка показывается всегда, если есть участники
+  // Режим "назначает учитель"
   if (captainMode === 'teacherFixed') {
-    // Для этого режима считаем, что капитан назначен учителем, если в команде есть участники
-    const hasTeamMembers = members.length > 0;
-    
     return (
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <Card>
@@ -332,11 +354,11 @@ export default function TeamLeader() {
             </Col>
           </Row>
           
-          {hasTeamMembers ? (
+          {hasCaptain ? (
             <>
               <Alert
                 type="success"
-                message="Капитан назначен учителем"
+                message={`Капитан команды: ${captainDisplayName || 'Назначен'}`}
                 icon={<CrownOutlined />}
                 style={{ marginTop: 16 }}
               />
@@ -351,20 +373,46 @@ export default function TeamLeader() {
               </Button>
             </>
           ) : (
-            <Alert
-              type="info"
-              message="Ожидание участников"
-              description="Добавьте участников в команду для назначения капитана"
-              style={{ marginTop: 16 }}
-            />
+            <>
+              <Alert
+                type={isTeacher ? 'warning' : 'info'}
+                message={isTeacher ? 'Капитан ещё не назначен' : 'Ожидание назначения капитана'}
+                description={isTeacher ? 'Выберите участника и назначьте его капитаном команды.' : 'Преподаватель должен назначить капитана команды.'}
+                style={{ marginTop: 16 }}
+                showIcon
+              />
+              {isTeacher && members.length > 0 && (
+                <Space.Compact style={{ width: '100%', marginTop: 16 }}>
+                  <Select
+                    style={{ flex: 1 }}
+                    placeholder="Выберите капитана"
+                    value={selectedLeader}
+                    onChange={setSelectedLeader}
+                    options={members.map(member => ({
+                      value: getMemberId(member),
+                      label: getMemberName(member),
+                    }))}
+                  />
+                  <Button
+                    type="primary"
+                    loading={saving}
+                    disabled={!selectedLeader}
+                    onClick={() => handleTeacherAssign(selectedLeader)}
+                  >
+                    Назначить
+                  </Button>
+                </Space.Compact>
+              )}
+            </>
           )}
           
           <Divider />
           <Text strong>Участники команды:</Text>
           <div style={{ marginTop: 8 }}>
             {members.map((member) => (
-              <Tag key={member.userId} icon={<UserOutlined />} color="blue">
-                {member.credentials}
+              <Tag key={getMemberId(member)} icon={<UserOutlined />} color="blue">
+                {getMemberName(member)}
+                {isMemberCaptain(member) && <CrownOutlined style={{ marginLeft: 8, color: '#faad14' }} />}
               </Tag>
             ))}
           </div>
