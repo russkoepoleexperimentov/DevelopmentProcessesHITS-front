@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Typography,
@@ -15,7 +15,6 @@ import {
   Modal,
   Form,
   Divider,
-  List,
   message,
   Spin,
 } from 'antd';
@@ -28,6 +27,7 @@ import {
   SendOutlined,
 } from '@ant-design/icons';
 import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
+import { convertFullPostConfig } from '../shared/utils/convertCriteria';
 import dayjs from 'dayjs';
 import CommentItem from '../shared/ui/CommentItem';
 import GradeForm from '../components/GradeForm';
@@ -51,6 +51,7 @@ export default function SolutionsPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [gradeFormConfig, setGradeFormConfig] = useState(null);
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -72,6 +73,11 @@ export default function SolutionsPage() {
     try {
       const data = await postAPI.getById(postId);
       setPost(data);
+      
+      if (data.criteria && data.criteria.length > 0) {
+        const config = convertFullPostConfig(data);
+        setGradeFormConfig(config);
+      }
     } catch (e) {
       message.error(e.message);
       navigate(-1);
@@ -118,7 +124,6 @@ export default function SolutionsPage() {
   const openDrawer = async (sol) => {
     setSelected(sol);
     setDrawerOpen(true);
-    // Load comments
     try {
       const data = await commentAPI.getForSolution(sol.id);
       setSolComments(Array.isArray(data) ? data : []);
@@ -127,7 +132,6 @@ export default function SolutionsPage() {
     }
   };
 
-  // Функция для предпросмотра оценки
   const handlePreview = async (evaluation) => {
     if (!selected) return null;
     try {
@@ -139,7 +143,6 @@ export default function SolutionsPage() {
     }
   };
 
-  // Функция для отправки оценки через GradeForm
   const handleSubmitGrade = async (evaluation, score, status, comment) => {
     if (!selected) return;
     setReviewLoading(true);
@@ -162,7 +165,6 @@ export default function SolutionsPage() {
     }
   };
 
-  // Старая функция handleReview (оставляем на всякий случай, но используем новую)
   const handleReview = async (values) => {
     if (!selected) return;
     setReviewLoading(true);
@@ -239,18 +241,16 @@ export default function SolutionsPage() {
     },
   ];
 
+  const hasCriteria = useMemo(() => 
+    gradeFormConfig && gradeFormConfig.weightedCriteria?.length > 0,
+    [gradeFormConfig]
+  );
+
   if (!post && !loading) return null;
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 24,
-        }}
-      >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} />
         <div>
           <Title level={3} style={{ margin: 0 }}>
@@ -302,17 +302,7 @@ export default function SolutionsPage() {
         onClose={() => setDrawerOpen(false)}
         width={520}
         extra={
-          <Button
-            type="primary"
-            onClick={() => {
-              reviewForm.setFieldsValue({
-                score: selected?.score || 0,
-                status: 'checked',
-                comment: '',
-              });
-              setReviewOpen(true);
-            }}
-          >
+          <Button type="primary" onClick={() => setReviewOpen(true)}>
             Оценить
           </Button>
         }
@@ -352,24 +342,10 @@ export default function SolutionsPage() {
             {selected.files && selected.files.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <Text strong>Файлы:</Text>
-                <div
-                  style={{
-                    marginTop: 8,
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 8,
-                  }}
-                >
+                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {selected.files.map((f) => (
-                    <a
-                      key={f.id}
-                      href={filesAPI.getUrl(f.id)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Tag icon={<FileOutlined />} color="blue">
-                        {f.name}
-                      </Tag>
+                    <a key={f.id} href={filesAPI.getUrl(f.id)} target="_blank" rel="noreferrer">
+                      <Tag icon={<FileOutlined />} color="blue">{f.name}</Tag>
                     </a>
                   ))}
                 </div>
@@ -378,7 +354,6 @@ export default function SolutionsPage() {
 
             <Divider />
 
-            {/* Solution comments */}
             <div>
               <Title level={5}>
                 <MessageOutlined style={{ marginRight: 6 }} />
@@ -412,7 +387,6 @@ export default function SolutionsPage() {
                     key={c.id}
                     comment={c}
                     onRefreshParent={() => {
-                      // Перезагружаем комментарии после изменений (удаление/редактирование/ответ)
                       commentAPI.getForSolution(selected.id).then(setSolComments).catch(() => setSolComments([]));
                     }}
                   />
@@ -423,12 +397,13 @@ export default function SolutionsPage() {
         )}
       </Drawer>
 
-      {/* Review Modal - оставляем старую форму и добавляем новую как опцию */}
+      {/* Простая форма оценки (без критериев) */}
       <Modal
-        title="Оценить решение (простая форма)"
-        open={reviewOpen && !post?.criteriaConfig}
+        title="Оценить решение"
+        open={reviewOpen && !hasCriteria}
         onCancel={() => setReviewOpen(false)}
         footer={null}
+        destroyOnClose
       >
         <Form form={reviewForm} layout="vertical" onFinish={handleReview}>
           <Form.Item
@@ -444,11 +419,7 @@ export default function SolutionsPage() {
             />
           </Form.Item>
 
-          <Form.Item
-            name="status"
-            label="Статус"
-            rules={[{ required: true }]}
-          >
+          <Form.Item name="status" label="Статус" rules={[{ required: true }]}>
             <Select
               size="large"
               options={[
@@ -465,9 +436,7 @@ export default function SolutionsPage() {
                   value: 'returned',
                   label: (
                     <span>
-                      <RollbackOutlined
-                        style={{ color: '#faad14', marginRight: 6 }}
-                      />
+                      <RollbackOutlined style={{ color: '#faad14', marginRight: 6 }} />
                       Вернуть на доработку
                     </span>
                   ),
@@ -494,17 +463,17 @@ export default function SolutionsPage() {
         </Form>
       </Modal>
 
-      {/* Новый Modal с GradeForm для заданий с критериями */}
+      {/* Расширенная форма оценки с GradeForm (для заданий с критериями) */}
       <Modal
-        title="Оценить решение (расширенная форма)"
-        open={reviewOpen && post?.criteriaConfig}
+        title="Оценить решение"
+        open={reviewOpen && hasCriteria}
         onCancel={() => setReviewOpen(false)}
         width={750}
         footer={null}
         destroyOnClose
       >
         <GradeForm
-          assignmentConfig={post?.criteriaConfig}
+          assignmentConfig={gradeFormConfig}
           initialEvaluation={selected?.teacherEvaluation}
           onPreview={handlePreview}
           onSubmit={handleSubmitGrade}

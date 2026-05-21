@@ -1,15 +1,15 @@
 // src/components/GradeForm.jsx
-import React, { useState, useEffect } from 'react';
-import { Form, InputNumber, Switch, Button, Card, Space, Typography, Divider, Spin, Alert, Row, Col, Tag, message } from 'antd';
-import { CheckOutlined, CloseOutlined, CalculatorOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Form, InputNumber, Switch, Button, Card, Space, Typography, Divider, Spin, Alert, Row, Col, Tag, message, Input } from 'antd';
+import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 
 const GradeForm = ({ 
-  assignmentConfig,      // конфигурация задания (критерии)
-  initialEvaluation,     // начальные значения оценки (если есть)
-  onPreview,            // функция для предпросмотра (вызов API)
-  onSubmit,             // функция для отправки оценки
+  assignmentConfig,
+  initialEvaluation,
+  onPreview,
+  onSubmit,
   loading = false 
 }) => {
   // Состояния для весовых критериев
@@ -27,11 +27,17 @@ const GradeForm = ({
   const [score, setScore] = useState(null);
   const [status, setStatus] = useState('checked');
   const [comment, setComment] = useState('');
+  
+  // Флаги для предотвращения бесконечного цикла
+  const isPreviewing = useRef(false);
+  const prevEvaluationRef = useRef(null);
+  const isInitialized = useRef(false);
 
   // Инициализация начальных значений
   useEffect(() => {
-    if (initialEvaluation) {
-      // Заполняем весовые оценки
+    if (initialEvaluation && !isInitialized.current) {
+      isInitialized.current = true;
+      
       if (initialEvaluation.weightedValues) {
         const scores = {};
         initialEvaluation.weightedValues.forEach(wv => {
@@ -40,7 +46,6 @@ const GradeForm = ({
         setWeightedScores(scores);
       }
       
-      // Заполняем тогглы
       if (initialEvaluation.toggledValues) {
         const toggles = {};
         initialEvaluation.toggledValues.forEach(tv => {
@@ -51,20 +56,11 @@ const GradeForm = ({
     }
   }, [initialEvaluation]);
 
-  // При изменении любого параметра - пересчитываем предпросмотр
-  useEffect(() => {
-    const evaluation = buildEvaluation();
-    if (Object.keys(weightedScores).length > 0) {
-      handlePreview(evaluation);
-    }
-  }, [weightedScores, toggledBonuses, toggledQuality]);
-
   // Сборка объекта Evaluation для отправки
-  const buildEvaluation = () => {
+  const buildEvaluation = useCallback(() => {
     const weightedValues = [];
     const toggledValues = [];
 
-    // Весовые критерии
     if (assignmentConfig?.weightedCriteria) {
       assignmentConfig.weightedCriteria.forEach(criterion => {
         if (weightedScores[criterion.id] !== undefined) {
@@ -76,7 +72,6 @@ const GradeForm = ({
       });
     }
 
-    // Бонусы/штрафы
     if (assignmentConfig?.bonusPenalties) {
       assignmentConfig.bonusPenalties.forEach(bp => {
         toggledValues.push({
@@ -86,7 +81,6 @@ const GradeForm = ({
       });
     }
 
-    // Коэффициенты качества (если есть)
     if (assignmentConfig?.qualityCoefficients) {
       assignmentConfig.qualityCoefficients.forEach(qc => {
         toggledValues.push({
@@ -97,34 +91,63 @@ const GradeForm = ({
     }
 
     return { weightedValues, toggledValues };
-  };
+  }, [assignmentConfig, weightedScores, toggledBonuses, toggledQuality]);
 
   // Запрос предпросмотра оценки
-  const handlePreview = async (evaluation) => {
+  const handlePreview = useCallback(async (evaluation) => {
     if (!onPreview) return;
+    if (isPreviewing.current) return;
     
+    isPreviewing.current = true;
     setPreviewLoading(true);
     try {
       const result = await onPreview(evaluation);
       setPreview(result);
-      setScore(result.finalScore);
+      if (result?.finalScore !== undefined) {
+        setScore(result.finalScore);
+      }
     } catch (error) {
       console.error('Preview error:', error);
     } finally {
       setPreviewLoading(false);
+      setTimeout(() => {
+        isPreviewing.current = false;
+      }, 200);
     }
-  };
+  }, [onPreview]);
+
+  // При изменении параметров - пересчитываем предпросмотр (с защитой от циклов)
+  useEffect(() => {
+    // Не запускаем предпросмотр при первом рендере без данных
+    if (Object.keys(weightedScores).length === 0) return;
+    
+    const evaluation = buildEvaluation();
+    const evaluationStr = JSON.stringify(evaluation);
+    
+    // Проверяем, изменилась ли оценка
+    if (prevEvaluationRef.current !== evaluationStr) {
+      prevEvaluationRef.current = evaluationStr;
+      
+      // Небольшая задержка для предотвращения множественных вызовов
+      const timeoutId = setTimeout(() => {
+        handlePreview(evaluation);
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [weightedScores, toggledBonuses, toggledQuality, buildEvaluation, handlePreview]);
 
   // Отправка оценки
   const handleSubmit = async () => {
     const evaluation = buildEvaluation();
     
-    if (!score || score < 0) {
+    if ((score === null || score === undefined) && preview?.finalScore === undefined) {
       message.error('Пожалуйста, дождитесь расчёта оценки');
       return;
     }
 
-    await onSubmit(evaluation, score, status, comment);
+    const finalScore = score !== null ? score : preview?.finalScore;
+    await onSubmit(evaluation, finalScore, status, comment);
   };
 
   // Обновление весового критерия

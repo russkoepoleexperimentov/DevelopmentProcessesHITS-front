@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { convertFrontendToBackend } from '../shared/utils/convertCriteria';
 import {
   Card,
   Form,
@@ -15,13 +16,18 @@ import {
   Spin,
   message,
   Divider,
+  Row,
+  Col,
+  Collapse,
+  Space,
 } from 'antd';
-import { UploadOutlined, FileOutlined, SettingOutlined } from '@ant-design/icons';
+import { UploadOutlined, FileOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
 import { courseAPI, postAPI, filesAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
 const { TextArea } = Input;
+const { Panel } = Collapse;
 
 export default function PostFormPage() {
   const { courseId, postId } = useParams();
@@ -33,7 +39,11 @@ export default function PostFormPage() {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [criteriaConfigured, setCriteriaConfigured] = useState(false);
+  const [savedCriteria, setSavedCriteria] = useState(null);
+  const [isTeamTask, setIsTeamTask] = useState(false);
   const isEdit = Boolean(postId);
+  
+  const watchCopyGroups = Form.useWatch('copyGroupsFromPreviousAssignment', form);
 
   useEffect(() => {
     if (isEdit) {
@@ -49,14 +59,29 @@ export default function PostFormPage() {
             maxScore: data.maxScore,
             taskType: data.taskType,
             solvableAfterDeadline: data.solvableAfterDeadline ?? false,
+            // Командные поля
+            minTeamSize: data.minTeamSize,
+            maxTeamSize: data.maxTeamSize,
+            captainMode: data.captainMode,
+            votingDurationHours: data.votingDurationHours,
+            predefinedTeamsCount: data.predefinedTeamsCount,
+            allowJoinTeam: data.allowJoinTeam ?? true,
+            allowLeaveTeam: data.allowLeaveTeam ?? true,
+            allowStudentTransferCaptain: data.allowStudentTransferCaptain ?? true,
+            copyGroupsFromPreviousAssignment: data.copyGroupsFromPreviousAssignment ?? false,
+            sourceAssignmentId: data.sourceAssignmentId,
           });
           setPostType(data.type);
+          // Проверяем, командное ли задание
+          if (data.minTeamSize || data.maxTeamSize || data.captainMode) {
+            setIsTeamTask(true);
+          }
           if (data.files && data.files.length > 0) {
             setFiles(data.files);
           }
-          // Проверяем, есть ли настроенные критерии
-          if (data.criteriaConfig) {
+          if (data.criteria && data.criteria.length > 0) {
             setCriteriaConfigured(true);
+            setSavedCriteria(data.criteria);
           }
         })
         .catch((e) => {
@@ -66,11 +91,11 @@ export default function PostFormPage() {
         .finally(() => setLoading(false));
     }
 
-    // Проверяем временно сохранённые критерии при создании нового задания
     if (!isEdit) {
       const savedConfig = sessionStorage.getItem('tempCriteriaConfig');
       if (savedConfig) {
         setCriteriaConfigured(true);
+        setSavedCriteria(JSON.parse(savedConfig));
       }
     }
   }, [isEdit, postId, form, navigate]);
@@ -99,21 +124,43 @@ export default function PostFormPage() {
       };
 
       if (values.type === 'task') {
-        body.deadline = values.deadline
-          ? values.deadline.toISOString()
-          : undefined;
+        body.deadline = values.deadline ? values.deadline.toISOString() : undefined;
         body.maxScore = values.maxScore ?? 5;
         body.taskType = values.taskType || 'mandatory';
         body.solvableAfterDeadline = values.solvableAfterDeadline ?? false;
         
-        // Добавляем критерии оценивания (если есть)
-        const savedConfig = sessionStorage.getItem('tempCriteriaConfig');
-        if (savedConfig && !isEdit) {
-          body.criteriaConfig = JSON.parse(savedConfig);
-          sessionStorage.removeItem('tempCriteriaConfig');
-        } else if (isEdit && criteriaConfigured) {
-          // При редактировании критерии уже должны быть в post
-          // Если нужно обновить - можно добавить логику
+        // Командные поля (только если включен командный режим)
+        if (isTeamTask) {
+          if (values.minTeamSize) body.minTeamSize = values.minTeamSize;
+          if (values.maxTeamSize) body.maxTeamSize = values.maxTeamSize;
+          if (values.captainMode) body.captainMode = values.captainMode;
+          if (values.votingDurationHours) body.votingDurationHours = values.votingDurationHours;
+          if (values.predefinedTeamsCount) body.predefinedTeamsCount = values.predefinedTeamsCount;
+          body.allowJoinTeam = values.allowJoinTeam ?? true;
+          body.allowLeaveTeam = values.allowLeaveTeam ?? true;
+          body.allowStudentTransferCaptain = values.allowStudentTransferCaptain ?? true;
+          body.copyGroupsFromPreviousAssignment = values.copyGroupsFromPreviousAssignment ?? false;
+          if (values.copyGroupsFromPreviousAssignment && values.sourceAssignmentId) {
+            body.sourceAssignmentId = values.sourceAssignmentId;
+          }
+        }
+        
+        // Критерии оценивания
+        let criteriaToSend = null;
+        
+        if (isEdit && savedCriteria) {
+          criteriaToSend = savedCriteria;
+        } else if (!isEdit) {
+          const savedConfig = sessionStorage.getItem('tempCriteriaConfig');
+          if (savedConfig) {
+            const frontendConfig = JSON.parse(savedConfig);
+            criteriaToSend = convertFrontendToBackend(frontendConfig, body.maxScore);
+            sessionStorage.removeItem('tempCriteriaConfig');
+          }
+        }
+        
+        if (criteriaToSend && criteriaToSend.length > 0) {
+          body.criteria = criteriaToSend;
         }
       }
 
@@ -127,7 +174,8 @@ export default function PostFormPage() {
         navigate(`/post/${res.id}`);
       }
     } catch (e) {
-      message.error(e.message);
+      console.error('Submit error:', e);
+      message.error(e.message || 'Ошибка при сохранении');
     } finally {
       setSubmitting(false);
     }
@@ -150,7 +198,7 @@ export default function PostFormPage() {
   }
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <Title level={3}>{isEdit ? 'Редактировать запись' : 'Новая запись'}</Title>
 
       <Card style={{ borderRadius: 12 }}>
@@ -163,13 +211,13 @@ export default function PostFormPage() {
             maxScore: 5,
             taskType: 'mandatory',
             solvableAfterDeadline: false,
+            allowJoinTeam: true,
+            allowLeaveTeam: true,
+            allowStudentTransferCaptain: true,
+            copyGroupsFromPreviousAssignment: false,
           }}
         >
-          <Form.Item
-            name="type"
-            label="Тип"
-            rules={[{ required: true }]}
-          >
+          <Form.Item name="type" label="Тип" rules={[{ required: true }]}>
             <Select
               size="large"
               onChange={(v) => setPostType(v)}
@@ -205,11 +253,7 @@ export default function PostFormPage() {
               </Form.Item>
 
               <Form.Item name="maxScore" label="Максимальный балл">
-                <InputNumber
-                  size="large"
-                  min={1}
-                  style={{ width: '100%' }}
-                />
+                <InputNumber size="large" min={1} style={{ width: '100%' }} />
               </Form.Item>
 
               <Form.Item name="taskType" label="Тип задания">
@@ -232,8 +276,99 @@ export default function PostFormPage() {
 
               <Divider />
 
-              {/* Кнопка настройки критериев оценивания */}
-              <Form.Item label="Критерии оценивания">
+              {/* Кнопка включения командного режима */}
+              <Form.Item label="Тип выполнения">
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Button 
+                    type={!isTeamTask ? 'primary' : 'default'}
+                    onClick={() => setIsTeamTask(false)}
+                    block
+                  >
+                    👤 Индивидуальное задание
+                  </Button>
+                  <Button 
+                    type={isTeamTask ? 'primary' : 'default'}
+                    onClick={() => setIsTeamTask(true)}
+                    icon={<TeamOutlined />}
+                    block
+                  >
+                    👥 Командное задание
+                  </Button>
+                </Space>
+              </Form.Item>
+
+              {/* Командные настройки (показываются только при включенном командном режиме) */}
+              {isTeamTask && (
+                <Collapse style={{ marginBottom: 16 }} defaultActiveKey={['team']}>
+                  <Panel header="⚙️ Настройки командной работы" key="team">
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item name="minTeamSize" label="Мин. размер команды" tooltip="Минимальное количество участников">
+                          <InputNumber min={1} max={20} style={{ width: '100%' }} placeholder="Не использовать" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item name="maxTeamSize" label="Макс. размер команды" tooltip="Максимальное количество участников">
+                          <InputNumber min={1} max={20} style={{ width: '100%' }} placeholder="Не использовать" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item name="captainMode" label="Режим выбора капитана">
+                      <Select
+                        size="large"
+                        options={[
+                          { value: 'firstMember', label: 'Первый участник становится капитаном' },
+                          { value: 'teacherFixed', label: 'Капитан назначается преподавателем' },
+                          { value: 'votingAndLottery', label: 'Голосование и жеребьёвка' },
+                        ]}
+                        placeholder="Выберите способ"
+                      />
+                    </Form.Item>
+
+                    <Form.Item name="votingDurationHours" label="Длительность голосования (часы)">
+                      <InputNumber min={1} max={168} style={{ width: '100%' }} placeholder="24" />
+                    </Form.Item>
+
+                    <Form.Item name="predefinedTeamsCount" label="Количество команд">
+                      <InputNumber min={1} max={50} style={{ width: '100%' }} placeholder="Автоматически" />
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                      <Col span={8}>
+                        <Form.Item name="allowJoinTeam" label="Вступление в команду" valuePropName="checked">
+                          <Switch />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item name="allowLeaveTeam" label="Выход из команды" valuePropName="checked">
+                          <Switch />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item name="allowStudentTransferCaptain" label="Смена капитана" valuePropName="checked">
+                          <Switch />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Form.Item name="copyGroupsFromPreviousAssignment" label="Скопировать группы из предыдущего задания" valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+
+                    {watchCopyGroups && (
+                      <Form.Item name="sourceAssignmentId" label="ID предыдущего задания">
+                        <Input placeholder="UUID предыдущего задания" />
+                      </Form.Item>
+                    )}
+                  </Panel>
+                </Collapse>
+              )}
+
+              <Divider />
+
+              {/* Критерии оценивания */}
+              <Form.Item label="📊 Критерии оценивания">
                 <Button
                   icon={<SettingOutlined />}
                   onClick={handleConfigureCriteria}
@@ -253,30 +388,21 @@ export default function PostFormPage() {
             </>
           )}
 
-          {/* Files */}
-          <Form.Item label="Файлы">
+          {/* Файлы */}
+          <Form.Item label="📎 Файлы">
             <Upload beforeUpload={handleUpload} showUploadList={false}>
               <Button icon={<UploadOutlined />} loading={uploading}>
                 Загрузить файл
               </Button>
             </Upload>
             {files.length > 0 && (
-              <div
-                style={{
-                  marginTop: 8,
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 4,
-                }}
-              >
+              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {files.map((f) => (
                   <Tag
                     key={f.id}
                     icon={<FileOutlined />}
                     closable
-                    onClose={() =>
-                      setFiles((prev) => prev.filter((x) => x.id !== f.id))
-                    }
+                    onClose={() => setFiles((prev) => prev.filter((x) => x.id !== f.id))}
                   >
                     {f.name}
                   </Tag>
@@ -286,13 +412,7 @@ export default function PostFormPage() {
           </Form.Item>
 
           <Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              size="large"
-              block
-              loading={submitting}
-            >
+            <Button type="primary" htmlType="submit" size="large" block loading={submitting}>
               {isEdit ? 'Сохранить' : 'Создать'}
             </Button>
           </Form.Item>

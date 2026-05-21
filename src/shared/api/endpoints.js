@@ -138,3 +138,20 @@ export const gradeDistributionAPI = {
   vote: (teamId, assignmentId, vote) =>
     client.post(`/teams/${teamId}/assignments/${assignmentId}/grade-distribution/vote`, { vote }),
 };
+
+// ─── Team Solutions ──────────────────────────────────────────
+export const teamSolutionAPI = {
+  submit: (taskId, body) => client.put(`/team-task/${taskId}/solution`, body),
+  delete: (taskId) => client.delete(`/team-task/${taskId}/solution`),
+  getMine: (taskId) => client.get(`/team-task/${taskId}/solution`),
+  getAll: (taskId, skip = 0, take = 20, status = '', teamId = '') => {
+    let url = `/team-task/${taskId}/solutions?skip=${skip}&take=${take}`;
+    if (status) url += `&status=${status}`;
+    if (teamId) url += `&teamId=${teamId}`;
+    return client.get(url);
+  },
+  review: (solutionId, body) => client.post(`/team-solution/${solutionId}/review`, body),
+  previewGrade: (solutionId, evaluation) => client.post(`/team-solution/${solutionId}/preview`, { evaluation }),
+  submitSelfAssessment: (taskId, evaluation) => client.put(`/team-task/${taskId}/self-assessment`, { evaluation }),
+  deleteSelfAssessment: (taskId) => client.delete(`/team-task/${taskId}/self-assessment`),
+};

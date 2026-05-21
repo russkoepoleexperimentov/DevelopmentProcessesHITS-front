@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Card, Button, Input, InputNumber, Space, Typography, 
-  Divider, message, Spin, Modal, Tag 
+  Divider, message, Spin, Tag, Alert
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
 import { postAPI } from '../shared/api/endpoints';
+import { convertBackendToFrontend, convertFrontendToBackend } from '../shared/utils/convertCriteria';
 
 const { Title, Text } = Typography;
 
@@ -16,13 +17,11 @@ export default function CriteriaPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Состояния всех критериев (такие же как в предыдущем компоненте)
+  // Состояния всех критериев
   const [weightedCriteria, setWeightedCriteria] = useState([
-    { id: 'w1', title: 'Функциональность', maxPoints: 10, weight: 0.4 }
+    { id: 'w1', title: 'Функциональность', maxPoints: 10, weight: 1.0 }
   ]);
-  const [bonusPenalties, setBonusPenalties] = useState([
-    { id: 'bp1', title: 'CI/CD настроен', score: 2, direction: 'ADD' }
-  ]);
+  const [bonusPenalties, setBonusPenalties] = useState([]);
   const [qualityCoefficients, setQualityCoefficients] = useState([]);
   const [blockingModifiers, setBlockingModifiers] = useState([]);
   const [failThreshold, setFailThreshold] = useState(null);
@@ -33,28 +32,49 @@ export default function CriteriaPage() {
 
   // Загрузка существующих критериев (если редактируем)
   useEffect(() => {
+    const savedConfig = sessionStorage.getItem('tempCriteriaConfig');
+    
     if (postId) {
       setLoading(true);
       postAPI.getById(postId)
         .then(data => {
-          if (data.criteriaConfig) {
-            setWeightedCriteria(data.criteriaConfig.weightedCriteria || []);
-            setBonusPenalties(data.criteriaConfig.bonusPenalties || []);
-            setQualityCoefficients(data.criteriaConfig.qualityCoefficients || []);
-            setBlockingModifiers(data.criteriaConfig.blockingModifiers || []);
-            setFailThreshold(data.criteriaConfig.failThreshold);
-            setSuccessThreshold(data.criteriaConfig.successThreshold);
-            setStudentScoreWeight(data.criteriaConfig.studentScoreWeight || 0);
-            setPenaltyPerDay(data.criteriaConfig.penaltyPerDay || 0);
-            setMaxDays(data.criteriaConfig.maxDays || 0);
+          if (data.criteria && data.criteria.length > 0) {
+            const frontendConfig = convertBackendToFrontend(data.criteria);
+            if (frontendConfig) {
+              loadConfig(frontendConfig);
+            }
+          } else if (savedConfig) {
+            loadConfig(JSON.parse(savedConfig));
           }
+          
+          if (data.failThreshold !== undefined) setFailThreshold(data.failThreshold);
+          if (data.successThreshold !== undefined) setSuccessThreshold(data.successThreshold);
+          if (data.studentScoreWeight !== undefined) setStudentScoreWeight(data.studentScoreWeight);
+          if (data.penaltyPerDay !== undefined) setPenaltyPerDay(data.penaltyPerDay);
+          if (data.maxDays !== undefined) setMaxDays(data.maxDays);
         })
-        .catch(err => message.error('Ошибка загрузки'))
+        .catch(err => {
+          console.error('Ошибка загрузки:', err);
+          message.error('Ошибка загрузки');
+        })
         .finally(() => setLoading(false));
+    } else if (savedConfig) {
+      loadConfig(JSON.parse(savedConfig));
     }
   }, [postId]);
 
-  // Генерация ID
+  const loadConfig = (config) => {
+    if (config.weightedCriteria) setWeightedCriteria(config.weightedCriteria);
+    if (config.bonusPenalties) setBonusPenalties(config.bonusPenalties);
+    if (config.qualityCoefficients) setQualityCoefficients(config.qualityCoefficients);
+    if (config.blockingModifiers) setBlockingModifiers(config.blockingModifiers);
+    if (config.failThreshold !== undefined) setFailThreshold(config.failThreshold);
+    if (config.successThreshold !== undefined) setSuccessThreshold(config.successThreshold);
+    if (config.studentScoreWeight !== undefined) setStudentScoreWeight(config.studentScoreWeight);
+    if (config.penaltyPerDay !== undefined) setPenaltyPerDay(config.penaltyPerDay);
+    if (config.maxDays !== undefined) setMaxDays(config.maxDays);
+  };
+
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
   // ========== Весовые критерии ==========
@@ -141,11 +161,32 @@ export default function CriteriaPage() {
     message.success('Веса нормализованы');
   };
 
+  // Автоматическая нормализация весов перед сохранением
+  const getNormalizedWeightedCriteria = () => {
+    const totalWeight = weightedCriteria.reduce((sum, c) => sum + (c.weight || 0), 0);
+    
+    // Если нет весовых критериев или сумма уже равна 1, возвращаем как есть
+    if (weightedCriteria.length === 0 || Math.abs(totalWeight - 1) < 0.001) {
+      return weightedCriteria;
+    }
+    
+    // Нормализуем веса
+    console.log(`Автонормализация: сумма весов = ${totalWeight}, нормализуем до 1`);
+    return weightedCriteria.map(c => ({
+      ...c,
+      weight: c.weight / totalWeight
+    }));
+  };
+
   // Сохранение
   const handleSave = async () => {
     setSaving(true);
-    const config = {
-      weightedCriteria,
+    
+    // Автоматически нормализуем веса перед сохранением
+    const normalizedWeightedCriteria = getNormalizedWeightedCriteria();
+    
+    const frontendConfig = {
+      weightedCriteria: normalizedWeightedCriteria,
       bonusPenalties,
       qualityCoefficients,
       blockingModifiers,
@@ -158,15 +199,32 @@ export default function CriteriaPage() {
 
     try {
       if (postId) {
-        await postAPI.update(postId, { criteriaConfig: config });
+        console.log('Обновляем критерии существующего задания:', postId);
+        const backendCriteria = convertFrontendToBackend(frontendConfig);
+        
+        await postAPI.update(postId, { 
+          criteria: backendCriteria,
+          failThreshold,
+          successThreshold,
+          studentScoreWeight,
+          penaltyPerDay,
+          maxDays
+        });
+        message.success('Критерии сохранены на сервере');
       } else {
-        // Временно сохраняем в localStorage или sessionStorage
-        sessionStorage.setItem('tempCriteriaConfig', JSON.stringify(config));
+        console.log('Сохраняем критерии в sessionStorage для нового задания');
+        sessionStorage.setItem('tempCriteriaConfig', JSON.stringify(frontendConfig));
+        message.success('Критерии сохранены (временное сохранение)');
       }
-      message.success('Критерии сохранены');
       navigate(-1);
     } catch (err) {
-      message.error('Ошибка сохранения');
+      console.error('Ошибка сохранения:', err);
+      if (err.response?.data) {
+        console.error('Детали ошибки:', err.response.data);
+        message.error('Ошибка сохранения: ' + (err.response.data?.message || err.message));
+      } else {
+        message.error('Ошибка сохранения: ' + (err.message || 'Неизвестная ошибка'));
+      }
     } finally {
       setSaving(false);
     }
@@ -221,6 +279,15 @@ export default function CriteriaPage() {
           </Text>
           <Button size="small" onClick={normalizeWeights} style={{ marginLeft: 12 }}>Нормализовать</Button>
         </div>
+        {!isValidWeight && weightedCriteria.length > 0 && (
+          <Alert
+            message="Внимание!"
+            description="Сумма весов должна быть равна 1. При сохранении веса будут автоматически нормализованы."
+            type="warning"
+            showIcon
+            style={{ marginTop: 12 }}
+          />
+        )}
       </Card>
 
       {/* Бонусы и штрафы */}

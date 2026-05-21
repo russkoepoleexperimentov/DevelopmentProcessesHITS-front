@@ -9,7 +9,6 @@ import {
   Spin,
   Divider,
   Input,
-  List,
   message,
   Popconfirm,
   Space,
@@ -19,6 +18,10 @@ import {
   Progress,
   Row,
   Col,
+  Empty,
+  Table,
+  Avatar,
+  Tooltip,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -32,20 +35,27 @@ import {
   DownOutlined,
   UpOutlined,
   UserOutlined,
-  InfoCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  TeamOutlined,
+  CrownOutlined,
+  LoginOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
-import { postAPI, solutionAPI, commentAPI, filesAPI } from '../shared/api/endpoints';
+import { postAPI, solutionAPI, commentAPI, filesAPI, teamAPI, teamSolutionAPI, gradeDistributionAPI } from '../shared/api/endpoints';
 import { useAuth } from '../shared/lib/authContext';
+import { convertBackendToFrontend } from '../shared/utils/convertCriteria';
 import dayjs from 'dayjs';
 import SelfAssessmentForm from '../components/SelfAssessmentForm';
+import GradeDistributionForm from '../components/GradeDistributionForm';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Panel } = Collapse;
 
-/* ──────── Comment component (recursive) ──────── */
+// ============================================================
+// Компонент комментария (рекурсивный)
+// ============================================================
 function CommentItem({ comment, onRefreshParent }) {
   const { user } = useAuth();
   const [replies, setReplies] = useState([]);
@@ -61,8 +71,8 @@ function CommentItem({ comment, onRefreshParent }) {
       const data = await commentAPI.getReplies(comment.id);
       setReplies(Array.isArray(data) ? data : []);
       setShowReplies(true);
-    } catch (e) {
-      message.error(e.message);
+    } catch {
+      setReplies([]);
     }
   };
 
@@ -81,7 +91,8 @@ function CommentItem({ comment, onRefreshParent }) {
       await commentAPI.reply(comment.id, replyText.trim());
       setReplyText('');
       setReplying(false);
-      loadReplies();
+      await loadReplies();
+      if (onRefreshParent) onRefreshParent();
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -97,6 +108,7 @@ function CommentItem({ comment, onRefreshParent }) {
       comment.text = editText.trim();
       setEditing(false);
       message.success('Комментарий обновлён');
+      if (onRefreshParent) onRefreshParent();
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -115,50 +127,20 @@ function CommentItem({ comment, onRefreshParent }) {
   };
 
   const isOwn = user && comment.author && user.id === comment.author.id;
+  const canEdit = isOwn && !comment.isDeleted;
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <div
-        style={{
-          background: '#fafafa',
-          borderRadius: 8,
-          padding: '10px 14px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 4,
-          }}
-        >
+      <div style={{ background: '#fafafa', borderRadius: 8, padding: '10px 14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <Text strong style={{ fontSize: 13 }}>
             {comment.author?.credentials || 'Пользователь'}
           </Text>
-          {isOwn && !comment.isDeleted && (
+          {canEdit && (
             <Space size={4}>
-              <Button
-                type="text"
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => {
-                  setEditing(true);
-                  setEditText(comment.text);
-                }}
-              />
-              <Popconfirm
-                title="Удалить комментарий?"
-                onConfirm={handleDelete}
-                okText="Да"
-                cancelText="Нет"
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  danger
-                  icon={<DeleteOutlined />}
-                />
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => { setEditing(true); setEditText(comment.text); }} />
+              <Popconfirm title="Удалить комментарий?" onConfirm={handleDelete} okText="Да" cancelText="Нет">
+                <Button type="text" size="small" danger icon={<DeleteOutlined />} />
               </Popconfirm>
             </Space>
           )}
@@ -166,48 +148,22 @@ function CommentItem({ comment, onRefreshParent }) {
 
         {editing ? (
           <div>
-            <TextArea
-              rows={2}
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-            />
+            <TextArea rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} />
             <Space style={{ marginTop: 6 }}>
-              <Button
-                type="primary"
-                size="small"
-                loading={submitting}
-                onClick={handleEdit}
-              >
-                Сохранить
-              </Button>
-              <Button size="small" onClick={() => setEditing(false)}>
-                Отмена
-              </Button>
+              <Button type="primary" size="small" loading={submitting} onClick={handleEdit}>Сохранить</Button>
+              <Button size="small" onClick={() => setEditing(false)}>Отмена</Button>
             </Space>
           </div>
         ) : (
-          <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-            {comment.text}
-          </Paragraph>
+          <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{comment.text}</Paragraph>
         )}
 
         <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
-          <Button
-            type="link"
-            size="small"
-            style={{ padding: 0 }}
-            onClick={() => setReplying(!replying)}
-          >
+          <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setReplying(!replying)}>
             Ответить
           </Button>
           {comment.nestedCount > 0 && (
-            <Button
-              type="link"
-              size="small"
-              style={{ padding: 0 }}
-              icon={showReplies ? <UpOutlined /> : <DownOutlined />}
-              onClick={toggleReplies}
-            >
+            <Button type="link" size="small" style={{ padding: 0 }} icon={showReplies ? <UpOutlined /> : <DownOutlined />} onClick={toggleReplies}>
               {showReplies ? 'Скрыть' : `Ответы (${comment.nestedCount})`}
             </Button>
           )}
@@ -216,24 +172,10 @@ function CommentItem({ comment, onRefreshParent }) {
 
       {replying && (
         <div style={{ marginLeft: 24, marginTop: 8 }}>
-          <TextArea
-            rows={2}
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Ваш ответ..."
-          />
+          <TextArea rows={2} value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Ваш ответ..." />
           <Space style={{ marginTop: 6 }}>
-            <Button
-              type="primary"
-              size="small"
-              loading={submitting}
-              onClick={handleReply}
-            >
-              Отправить
-            </Button>
-            <Button size="small" onClick={() => setReplying(false)}>
-              Отмена
-            </Button>
+            <Button type="primary" size="small" loading={submitting} onClick={handleReply}>Отправить</Button>
+            <Button size="small" onClick={() => setReplying(false)}>Отмена</Button>
           </Space>
         </div>
       )}
@@ -241,11 +183,7 @@ function CommentItem({ comment, onRefreshParent }) {
       {showReplies && replies.length > 0 && (
         <div style={{ marginLeft: 24, marginTop: 8 }}>
           {replies.map((r) => (
-            <CommentItem
-              key={r.id}
-              comment={r}
-              onRefreshParent={loadReplies}
-            />
+            <CommentItem key={r.id} comment={r} onRefreshParent={loadReplies} />
           ))}
         </div>
       )}
@@ -253,12 +191,14 @@ function CommentItem({ comment, onRefreshParent }) {
   );
 }
 
-/* ──────── Компонент для отображения детальной оценки ──────── */
+// ============================================================
+// Компонент детальной оценки
+// ============================================================
 function GradeBreakdown({ breakdown, maxScore }) {
   if (!breakdown) return null;
 
   const percent = maxScore > 0 ? (breakdown.finalScore / maxScore) * 100 : 0;
-  const isPassed = breakdown.thresholdApplied === false || breakdown.finalScore > 0;
+  const isPassed = !breakdown.thresholdApplied || breakdown.finalScore > 0;
 
   return (
     <Card size="small" style={{ background: '#f0f7ff', marginBottom: 12 }}>
@@ -267,8 +207,7 @@ function GradeBreakdown({ breakdown, maxScore }) {
           <Text strong style={{ fontSize: 16 }}>Детали оценки</Text>
         </Col>
         <Col>
-          <Tag color={isPassed ? 'success' : 'error'}>
-            {isPassed ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+          <Tag color={isPassed ? 'success' : 'error'} icon={isPassed ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
             {isPassed ? ' Зачтено' : ' Не зачтено'}
           </Tag>
         </Col>
@@ -279,7 +218,7 @@ function GradeBreakdown({ breakdown, maxScore }) {
           <div style={{ textAlign: 'center' }}>
             <Progress
               type="circle"
-              percent={Math.round(percent)}
+              percent={Math.min(100, Math.max(0, Math.round(percent)))}
               size={100}
               strokeColor={percent >= 60 ? '#52c41a' : percent >= 30 ? '#faad14' : '#ff4d4f'}
               format={() => `${breakdown.finalScore?.toFixed(1)}/${maxScore}`}
@@ -288,23 +227,17 @@ function GradeBreakdown({ breakdown, maxScore }) {
         </Col>
         <Col span={12}>
           <Descriptions column={1} size="small">
-            <Descriptions.Item label="Базовая оценка">
-              {breakdown.baseScore?.toFixed(1)}
-            </Descriptions.Item>
+            <Descriptions.Item label="Базовая оценка">{breakdown.baseScore?.toFixed(1)}</Descriptions.Item>
             {breakdown.latePenalty > 0 && (
               <Descriptions.Item label="Штраф за просрочку">
                 <Text type="danger">-{breakdown.latePenalty.toFixed(1)}</Text>
               </Descriptions.Item>
             )}
             {breakdown.afterQualityCoefficient !== breakdown.baseScore && (
-              <Descriptions.Item label="Коэффициент качества">
-                {breakdown.afterQualityCoefficient?.toFixed(1)}
-              </Descriptions.Item>
+              <Descriptions.Item label="Коэффициент качества">{breakdown.afterQualityCoefficient?.toFixed(1)}</Descriptions.Item>
             )}
             {breakdown.afterBlocking !== breakdown.afterLatePenalty && (
-              <Descriptions.Item label="Блокировка">
-                {breakdown.afterBlocking?.toFixed(1)}
-              </Descriptions.Item>
+              <Descriptions.Item label="Блокировка">{breakdown.afterBlocking?.toFixed(1)}</Descriptions.Item>
             )}
             {breakdown.thresholdApplied && (
               <Descriptions.Item label="Порог">
@@ -318,18 +251,24 @@ function GradeBreakdown({ breakdown, maxScore }) {
   );
 }
 
-/* ──────── Main PostPage ──────── */
+// ============================================================
+// Главный компонент PostPage
+// ============================================================
 export default function PostPage() {
-  // ✅ ВСЕ ХУКИ В НАЧАЛЕ (до любых условий)
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const location = useLocation();
   const role = location.state?.role;
+  
+  const isStudent = role === 'student';
+  const isTeacher = role === 'teacher';
 
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [solution, setSolution] = useState(null);
+  const [teamSolution, setTeamSolution] = useState(null);
+  const [myTeam, setMyTeam] = useState(null);
   const [solText, setSolText] = useState('');
   const [solFiles, setSolFiles] = useState([]);
   const [solUploading, setSolUploading] = useState(false);
@@ -341,12 +280,37 @@ export default function PostPage() {
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
+  const [gradeDistribution, setGradeDistribution] = useState(null);
+  
+  const [criteriaConfig, setCriteriaConfig] = useState(null);
 
-  // useCallbacks
+  // Проверяем, командное ли задание
+  const isTeamTask = useMemo(() => {
+    const isTeam = post?.minTeamSize > 0 || post?.maxTeamSize > 0 || post?.captainMode;
+    console.log('🔍 isTeamTask check:', { 
+      minTeamSize: post?.minTeamSize, 
+      maxTeamSize: post?.maxTeamSize, 
+      captainMode: post?.captainMode,
+      result: isTeam 
+    });
+    return isTeam;
+  }, [post]);
+
+  const isCaptain = useMemo(() => {
+    if (!myTeam || !user) return false;
+    const member = myTeam.members?.find(m => m.userId === user.id);
+    return member?.role === 'leader';
+  }, [myTeam, user]);
+
   const fetchPost = useCallback(async () => {
     try {
       const data = await postAPI.getById(id);
+      console.log('📦 Post data received:', data);
       setPost(data);
+      if (data.criteria && data.criteria.length > 0) {
+        const config = convertBackendToFrontend(data.criteria);
+        setCriteriaConfig(config);
+      }
     } catch (e) {
       message.error(e.message);
       navigate('/');
@@ -360,33 +324,72 @@ export default function PostPage() {
       const data = await commentAPI.getForPost(id);
       setComments(Array.isArray(data) ? data : []);
     } catch {
-      /* ignore */
+      setComments([]);
     }
   }, [id]);
+
+  const fetchMyTeam = useCallback(async () => {
+    if (!isTeamTask) {
+      console.log('⏭️ Skipping fetchMyTeam - not a team task');
+      return;
+    }
+    console.log('🔍 Fetching my team for assignment:', id);
+    try {
+      const data = await teamAPI.getMyTeam(id);
+      console.log('👥 My team data:', data);
+      setMyTeam(data);
+    } catch (e) {
+      console.error('❌ Error fetching team:', e);
+      setMyTeam(null);
+    }
+  }, [id, isTeamTask]);
 
   const fetchSolution = useCallback(async () => {
     try {
-      const data = await solutionAPI.getMine(id);
-      setSolution(data);
-      if (data?.selfAssessment) {
-        setSelfAssessment(data.selfAssessment);
+      if (isTeamTask) {
+        console.log('🔍 Fetching team solution for:', id);
+        const data = await teamSolutionAPI.getMine(id);
+        console.log('📦 Team solution data:', data);
+        setTeamSolution(data);
+        if (data?.selfAssessments) {
+          const myAssessment = data.selfAssessments.find(sa => sa.userId === user?.id);
+          if (myAssessment) setSelfAssessment(myAssessment.evaluation);
+        }
+      } else {
+        console.log('🔍 Fetching individual solution for:', id);
+        const data = await solutionAPI.getMine(id);
+        console.log('📦 Solution data:', data);
+        setSolution(data);
+        if (data?.selfAssessment) setSelfAssessment(data.selfAssessment);
       }
-    } catch {
-      setSolution(null);
+    } catch (e) {
+      console.log('⚠️ No solution found (this is normal if not submitted yet)');
+      if (isTeamTask) setTeamSolution(null);
+      else setSolution(null);
     }
-  }, [id]);
+  }, [id, isTeamTask, user?.id]);
+
+  const fetchGradeDistribution = useCallback(async () => {
+    if (!isTeamTask || !myTeam || !teamSolution?.score) return;
+    try {
+      const data = await gradeDistributionAPI.get(myTeam.id, id);
+      setGradeDistribution(data);
+    } catch {
+      setGradeDistribution(null);
+    }
+  }, [isTeamTask, myTeam, id, teamSolution?.score]);
 
   const fetchSolutionComments = useCallback(async () => {
-    if (!solution) return;
+    const solId = isTeamTask ? teamSolution?.id : solution?.id;
+    if (!solId) return;
     try {
-      const data = await commentAPI.getForSolution(solution.id);
+      const data = await commentAPI.getForSolution(solId);
       setSolutionComments(Array.isArray(data) ? data : []);
     } catch {
       setSolutionComments([]);
     }
-  }, [solution]);
+  }, [isTeamTask, teamSolution?.id, solution?.id]);
 
-  // useEffect
   useEffect(() => {
     fetchPost();
     fetchComments();
@@ -394,15 +397,22 @@ export default function PostPage() {
 
   useEffect(() => {
     if (post?.type === 'task') {
+      fetchMyTeam();
       fetchSolution();
     }
-  }, [post, fetchSolution]);
+  }, [post, fetchMyTeam, fetchSolution]);
 
   useEffect(() => {
-    if (solution) {
+    if (solution || teamSolution) {
       fetchSolutionComments();
     }
-  }, [solution, fetchSolutionComments]);
+  }, [solution, teamSolution, fetchSolutionComments]);
+
+  useEffect(() => {
+    if (isTeamTask && myTeam && teamSolution?.score) {
+      fetchGradeDistribution();
+    }
+  }, [isTeamTask, myTeam, teamSolution?.score, fetchGradeDistribution]);
 
   // Handlers
   const handleDeletePost = async () => {
@@ -428,11 +438,39 @@ export default function PostPage() {
     return false;
   };
 
+  const handleJoinTeam = async () => {
+    if (!myTeam) {
+      console.log('🔍 Joining team for assignment:', id);
+      try {
+        await teamAPI.join(id);
+        message.success('Вы присоединились к команде');
+        fetchMyTeam();
+      } catch (e) {
+        console.error('❌ Error joining team:', e);
+        message.error(e.message);
+      }
+    }
+  };
+
+  const handleLeaveTeam = async () => {
+    if (myTeam) {
+      console.log('🔍 Leaving team:', myTeam.id);
+      try {
+        await teamAPI.leave(myTeam.id);
+        message.success('Вы покинули команду');
+        fetchMyTeam();
+      } catch (e) {
+        console.error('❌ Error leaving team:', e);
+        message.error(e.message);
+      }
+    }
+  };
+
   const handleSubmitSolution = async () => {
     setSolSubmitting(true);
     try {
-      const body = {
-        text: solText,
+      const body = { 
+        text: solText, 
         files: solFiles.map((f) => f.id),
       };
       
@@ -440,12 +478,15 @@ export default function PostPage() {
         body.selfAssessment = selfAssessment;
       }
       
-      await solutionAPI.submit(id, body);
+      if (isTeamTask) {
+        await teamSolutionAPI.submit(id, body);
+      } else {
+        await solutionAPI.submit(id, body);
+      }
       message.success('Решение отправлено');
       setSolText('');
       setSolFiles([]);
-      setSelfAssessment(null);
-      fetchSolution();
+      await fetchSolution();
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -455,22 +496,57 @@ export default function PostPage() {
 
   const handleDeleteSolution = async () => {
     try {
-      await solutionAPI.delete(id);
-      message.success('Решение удалено');
-      setSolution(null);
+      if (isTeamTask) {
+        await teamSolutionAPI.delete(id);
+        setTeamSolution(null);
+      } else {
+        await solutionAPI.delete(id);
+        setSolution(null);
+      }
       setSelfAssessment(null);
+      message.success('Решение удалено');
+    } catch (e) {
+      message.error(e.message);
+    }
+  };
+
+  const handleSelfAssessmentChange = useCallback(async (assessment) => {
+    setSelfAssessment(assessment);
+    
+    const isPending = isTeamTask ? teamSolution?.status === 'pending' : solution?.status === 'pending';
+    
+    if (isPending) {
+      try {
+        if (isTeamTask) {
+          await teamSolutionAPI.submitSelfAssessment(id, assessment);
+        } else {
+          await solutionAPI.submit(id, { selfAssessment: assessment });
+        }
+        console.log('Самооценка автосохранена');
+      } catch (e) {
+        console.error('Ошибка автосохранения самооценки:', e);
+      }
+    }
+  }, [isTeamTask, teamSolution?.status, solution?.status, id]);
+
+  const handleGradeDistributionSave = async (teamId, assignmentId, entries) => {
+    try {
+      await gradeDistributionAPI.update(teamId, assignmentId, entries);
+      message.success('Распределение баллов сохранено');
+      fetchGradeDistribution();
     } catch (e) {
       message.error(e.message);
     }
   };
 
   const handleAddSolutionComment = async () => {
-    if (!solCommentText.trim() || !solution) return;
+    const solId = isTeamTask ? teamSolution?.id : solution?.id;
+    if (!solCommentText.trim() || !solId) return;
     setSolCommentLoading(true);
     try {
-      await commentAPI.addToSolution(solution.id, solCommentText.trim());
+      await commentAPI.addToSolution(solId, solCommentText.trim());
       setSolCommentText('');
-      fetchSolutionComments();
+      await fetchSolutionComments();
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -484,7 +560,7 @@ export default function PostPage() {
     try {
       await commentAPI.addToPost(id, commentText.trim());
       setCommentText('');
-      fetchComments();
+      await fetchComments();
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -492,7 +568,6 @@ export default function PostPage() {
     }
   };
 
-  // Мемоизированные значения
   const statusLabels = useMemo(() => ({
     pending: { text: 'На проверке', color: 'processing' },
     checked: { text: 'Проверено', color: 'success' },
@@ -500,11 +575,19 @@ export default function PostPage() {
   }), []);
 
   const hasCriteria = useMemo(() => 
-    post?.criteriaConfig && post.criteriaConfig.weightedCriteria?.length > 0,
-    [post?.criteriaConfig]
+    criteriaConfig?.weightedCriteria?.length > 0,
+    [criteriaConfig]
   );
 
-  // Ранние возвраты (после всех хуков)
+  const canEditSelfAssessment = useMemo(() => {
+    const currentStatus = isTeamTask ? teamSolution?.status : solution?.status;
+    if (!currentStatus) return true;
+    return currentStatus === 'pending';
+  }, [isTeamTask, teamSolution?.status, solution?.status]);
+
+  const currentSolution = isTeamTask ? teamSolution : solution;
+  const canSubmit = !currentSolution || currentSolution.status === 'returned';
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
@@ -515,60 +598,56 @@ export default function PostPage() {
 
   if (!post) return null;
 
+  const teamMembersColumns = [
+    {
+      title: 'Участник',
+      dataIndex: 'credentials',
+      key: 'credentials',
+      render: (text, record) => (
+        <Space>
+          <Avatar icon={<UserOutlined />} />
+          {text}
+          {record.role === 'leader' && <CrownOutlined style={{ color: '#faad14' }} />}
+        </Space>
+      ),
+    },
+    {
+      title: 'Роль',
+      dataIndex: 'role',
+      key: 'role',
+      render: (role) => (
+        <Tag color={role === 'leader' ? 'gold' : 'default'}>
+          {role === 'leader' ? 'Капитан' : 'Участник'}
+        </Tag>
+      ),
+    },
+  ];
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <Button
-        type="text"
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate(-1)}
-        style={{ marginBottom: 16, fontSize: 15 }}
-      >
+      <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>
         Назад
       </Button>
 
-      {/* Post Card */}
+      {/* Карточка поста/задания */}
       <Card style={{ borderRadius: 12, marginBottom: 24 }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: 16,
-          }}
-        >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            <Tag color={post.type === 'task' ? 'blue' : 'default'}>
-              {post.type === 'task' ? 'Задание' : 'Пост'}
-            </Tag>
-            <Title level={3} style={{ margin: '8px 0 0' }}>
-              {post.title}
-            </Title>
+            <Tag color={post.type === 'task' ? 'blue' : 'default'}>{post.type === 'task' ? 'Задание' : 'Пост'}</Tag>
+            {isTeamTask && <Tag color="purple" icon={<TeamOutlined />}>Командное</Tag>}
+            <Title level={3} style={{ margin: '8px 0 0' }}>{post.title}</Title>
           </div>
-          {role === 'teacher' && (
+          {isTeacher && (
             <Space>
-              <Button
-                icon={<EditOutlined />}
-                onClick={() => navigate(`/post/${id}/edit`)}
-              >
-                Редактировать
-              </Button>
-              <Popconfirm
-                title="Удалить запись?"
-                onConfirm={handleDeletePost}
-                okText="Да"
-                cancelText="Нет"
-              >
-                <Button danger icon={<DeleteOutlined />}>
-                  Удалить
-                </Button>
+              <Button icon={<EditOutlined />} onClick={() => navigate(`/post/${id}/edit`)}>Редактировать</Button>
+              <Popconfirm title="Удалить запись?" onConfirm={handleDeletePost} okText="Да" cancelText="Нет">
+                <Button danger icon={<DeleteOutlined />}>Удалить</Button>
               </Popconfirm>
             </Space>
           )}
         </div>
 
-        <Paragraph style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>
-          {post.text}
-        </Paragraph>
+        <Paragraph style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>{post.text}</Paragraph>
 
         {post.type === 'task' && (
           <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }}>
@@ -578,11 +657,7 @@ export default function PostPage() {
                 {dayjs(post.deadline).format('DD.MM.YYYY HH:mm')}
               </Descriptions.Item>
             )}
-            {post.maxScore != null && (
-              <Descriptions.Item label="Макс. балл">
-                {post.maxScore}
-              </Descriptions.Item>
-            )}
+            {post.maxScore != null && <Descriptions.Item label="Макс. балл">{post.maxScore}</Descriptions.Item>}
             {post.taskType && (
               <Descriptions.Item label="Тип">
                 <Tag color={post.taskType === 'mandatory' ? 'red' : 'blue'}>
@@ -590,23 +665,28 @@ export default function PostPage() {
                 </Tag>
               </Descriptions.Item>
             )}
-            {post.solvableAfterDeadline != null && (
-              <Descriptions.Item label="Сдача после дедлайна">
-                {post.solvableAfterDeadline ? 'Да' : 'Нет'}
-              </Descriptions.Item>
+            {isTeamTask && (
+              <>
+                <Descriptions.Item label="Размер команды">
+                  {post.minTeamSize || 1} - {post.maxTeamSize || '不限'} человек
+                </Descriptions.Item>
+                <Descriptions.Item label="Режим капитана">
+                  {post.captainMode === 'firstMember' && 'Первый участник становится капитаном'}
+                  {post.captainMode === 'teacherFixed' && 'Капитан назначается преподавателем'}
+                  {post.captainMode === 'votingAndLottery' && 'Голосование и жеребьёвка'}
+                </Descriptions.Item>
+              </>
             )}
           </Descriptions>
         )}
 
-        {post.files && post.files.length > 0 && (
+        {post.files?.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <Text strong>Файлы:</Text>
             <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {post.files.map((f) => (
                 <a key={f.id} href={filesAPI.getUrl(f.id)} target="_blank" rel="noreferrer">
-                  <Tag icon={<FileOutlined />} color="blue" style={{ cursor: 'pointer' }}>
-                    {f.name}
-                  </Tag>
+                  <Tag icon={<FileOutlined />} color="blue" style={{ cursor: 'pointer' }}>{f.name}</Tag>
                 </a>
               ))}
             </div>
@@ -614,124 +694,138 @@ export default function PostPage() {
         )}
       </Card>
 
-      {/* Solution section for students */}
-      {post.type === 'task' && role !== 'teacher' && (
+      {/* Командная информация для студентов */}
+      {post.type === 'task' && isStudent && isTeamTask && (
+        <Card title="👥 Команда" style={{ marginBottom: 24 }}>
+          {myTeam ? (
+            <div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text strong>Команда: {myTeam.name}</Text>
+                <Popconfirm title="Вы уверены, что хотите покинуть команду?" onConfirm={handleLeaveTeam}>
+                  <Button icon={<LogoutOutlined />} danger size="small">Покинуть команду</Button>
+                </Popconfirm>
+              </div>
+              <Table
+                columns={teamMembersColumns}
+                dataSource={myTeam.members || []}
+                rowKey="userId"
+                pagination={false}
+                size="small"
+              />
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center' }}>
+              <Text type="secondary">Вы ещё не в команде</Text>
+              <div style={{ marginTop: 12 }}>
+                <Button type="primary" icon={<LoginOutlined />} onClick={handleJoinTeam}>
+                  Присоединиться к команде
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Секция решения - ДЛЯ СТУДЕНТОВ */}
+      {post.type === 'task' && isStudent && (!isTeamTask || myTeam) && (
         <Card title="Ваше решение" style={{ borderRadius: 12, marginBottom: 24 }}>
-          {solution ? (
+          {/* Самооценка для студентов */}
+          {hasCriteria && (
+            <Collapse style={{ marginBottom: 16 }} defaultActiveKey={currentSolution?.selfAssessment ? [] : ['1']}>
+              <Panel 
+                header={
+                  <span>
+                    <UserOutlined /> 
+                    {currentSolution?.selfAssessment && currentSolution.status !== 'pending' 
+                      ? ' Ваша самооценка' 
+                      : ' Самооценка работы'}
+                  </span>
+                } 
+                key="1"
+              >
+                <SelfAssessmentForm
+                  assignmentConfig={criteriaConfig}
+                  initialAssessment={selfAssessment}
+                  onChange={handleSelfAssessmentChange}
+                  readOnly={!canEditSelfAssessment}
+                />
+                {currentSolution && currentSolution.status === 'pending' && (
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                    💡 Самооценка автоматически сохраняется. Вы можете изменить её до проверки преподавателем.
+                  </Text>
+                )}
+              </Panel>
+            </Collapse>
+          )}
+
+          {/* Распределение баллов для капитана */}
+          {isTeamTask && isCaptain && gradeDistribution && teamSolution?.score !== null && (
+            <div style={{ marginBottom: 16 }}>
+              <GradeDistributionForm
+                teamId={myTeam?.id}
+                assignmentId={id}
+                teamRawScore={teamSolution?.score}
+                members={myTeam?.members || []}
+                initialDistribution={gradeDistribution?.entries}
+                onSave={handleGradeDistributionSave}
+                isCaptain={true}
+                readOnly={false}
+              />
+            </div>
+          )}
+
+          {currentSolution ? (
+            // Уже отправленное решение
             <div>
               <div style={{ marginBottom: 12 }}>
-                <Tag color={statusLabels[solution.status]?.color || 'default'}>
-                  {statusLabels[solution.status]?.text || solution.status}
+                <Tag color={statusLabels[currentSolution.status]?.color || 'default'}>
+                  {statusLabels[currentSolution.status]?.text || currentSolution.status}
                 </Tag>
-                {solution.score != null && (
-                  <Tag color="green">
-                    Оценка: {solution.score}/{post.maxScore}
-                  </Tag>
+                {currentSolution.score != null && (
+                  <Tag color="green">Оценка команды: {currentSolution.score}/{post.maxScore}</Tag>
                 )}
-                <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                  {dayjs(solution.updatedDate).format('DD.MM.YYYY HH:mm')}
+                <Text type="secondary" style={{ marginLeft: 8 }}>
+                  {dayjs(currentSolution.updatedDate).format('DD.MM.YYYY HH:mm')}
                 </Text>
               </div>
               
-              {solution.breakdown && (
-                <GradeBreakdown breakdown={solution.breakdown} maxScore={post.maxScore} />
-              )}
+              {currentSolution.breakdown && <GradeBreakdown breakdown={currentSolution.breakdown} maxScore={post.maxScore} />}
               
-              {solution.selfAssessment && (
-                <Collapse style={{ marginBottom: 12 }} ghost>
-                  <Panel header={<span><UserOutlined /> Ваша самооценка</span>} key="1">
-                    <SelfAssessmentForm
-                      assignmentConfig={post.criteriaConfig}
-                      initialAssessment={solution.selfAssessment}
-                      readOnly={true}
-                    />
-                  </Panel>
-                </Collapse>
-              )}
+              {currentSolution.text && <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{currentSolution.text}</Paragraph>}
               
-              {solution.text && (
-                <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
-                  {solution.text}
-                </Paragraph>
-              )}
-              
-              {solution.files && solution.files.length > 0 && (
+              {currentSolution.files?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                  {solution.files.map((f) => (
+                  {currentSolution.files.map((f) => (
                     <a key={f.id} href={filesAPI.getUrl(f.id)} target="_blank" rel="noreferrer">
-                      <Tag icon={<DownloadOutlined />} color="blue">
-                        {f.name}
-                      </Tag>
+                      <Tag icon={<DownloadOutlined />} color="blue">{f.name}</Tag>
                     </a>
                   ))}
                 </div>
               )}
               
-              <Popconfirm
-                title="Удалить решение?"
-                onConfirm={handleDeleteSolution}
-                okText="Да"
-                cancelText="Нет"
-              >
-                <Button danger size="small">
-                  Удалить решение
-                </Button>
-              </Popconfirm>
+              {currentSolution.status !== 'checked' && (
+                <Popconfirm title="Удалить решение?" onConfirm={handleDeleteSolution} okText="Да" cancelText="Нет">
+                  <Button danger size="small">Удалить решение</Button>
+                </Popconfirm>
+              )}
 
               <Divider />
               <div>
-                <Title level={5}>
-                  <MessageOutlined style={{ marginRight: 6 }} />
-                  Комментарии к решению
-                </Title>
-
+                <Title level={5}><MessageOutlined /> Комментарии к решению</Title>
                 <div style={{ marginBottom: 12 }}>
-                  <TextArea
-                    rows={2}
-                    value={solCommentText}
-                    onChange={(e) => setSolCommentText(e.target.value)}
-                    placeholder="Написать комментарий..."
-                  />
-                  <Button
-                    type="primary"
-                    size="small"
-                    style={{ marginTop: 6 }}
-                    loading={solCommentLoading}
-                    onClick={handleAddSolutionComment}
-                    icon={<SendOutlined />}
-                  >
-                    Отправить
-                  </Button>
+                  <TextArea rows={2} value={solCommentText} onChange={(e) => setSolCommentText(e.target.value)} placeholder="Написать комментарий..." />
+                  <Button type="primary" size="small" style={{ marginTop: 6 }} loading={solCommentLoading} onClick={handleAddSolutionComment} icon={<SendOutlined />}>Отправить</Button>
                 </div>
-
                 {solutionComments.length === 0 ? (
                   <Text type="secondary">Нет комментариев</Text>
                 ) : (
-                  solutionComments.map((c) => (
-                    <CommentItem
-                      key={c.id}
-                      comment={c}
-                      onRefreshParent={fetchSolutionComments}
-                    />
-                  ))
+                  solutionComments.map((c) => <CommentItem key={c.id} comment={c} onRefreshParent={fetchSolutionComments} />)
                 )}
               </div>
             </div>
-          ) : (
+          ) : canSubmit && (
+            // Форма для нового решения
             <div>
-              {hasCriteria && (
-                <Collapse style={{ marginBottom: 16 }} defaultActiveKey={['1']}>
-                  <Panel header={<span><UserOutlined /> Самооценка работы</span>} key="1">
-                    <SelfAssessmentForm
-                      assignmentConfig={post.criteriaConfig}
-                      initialAssessment={selfAssessment}
-                      onChange={setSelfAssessment}
-                      readOnly={false}
-                    />
-                  </Panel>
-                </Collapse>
-              )}
-              
               <TextArea
                 rows={3}
                 value={solText}
@@ -742,73 +836,85 @@ export default function PostPage() {
               
               <div style={{ marginBottom: 12 }}>
                 <Upload beforeUpload={handleUploadSolFile} showUploadList={false}>
-                  <Button loading={solUploading} icon={<FileOutlined />}>
-                    Прикрепить файл
-                  </Button>
+                  <Button loading={solUploading} icon={<FileOutlined />}>Прикрепить файл</Button>
                 </Upload>
                 {solFiles.length > 0 && (
                   <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {solFiles.map((f) => (
-                      <Tag
-                        key={f.id}
-                        closable
-                        onClose={() => setSolFiles((prev) => prev.filter((x) => x.id !== f.id))}
-                      >
-                        {f.name}
-                      </Tag>
+                      <Tag key={f.id} closable onClose={() => setSolFiles((prev) => prev.filter((x) => x.id !== f.id))}>{f.name}</Tag>
                     ))}
                   </div>
                 )}
               </div>
               
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                loading={solSubmitting}
-                onClick={handleSubmitSolution}
-              >
-                Отправить решение
-              </Button>
+              <Button type="primary" icon={<SendOutlined />} loading={solSubmitting} onClick={handleSubmitSolution}>Отправить решение</Button>
             </div>
           )}
         </Card>
       )}
 
-      {/* Comments */}
-      <Card
-        title={
-          <span>
-            <MessageOutlined style={{ marginRight: 8 }} />
-            Комментарии
-          </span>
-        }
-        style={{ borderRadius: 12 }}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <TextArea
-            rows={2}
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Написать комментарий..."
-          />
-          <Button
-            type="primary"
-            size="small"
-            style={{ marginTop: 8 }}
-            loading={commentLoading}
-            onClick={handleAddComment}
-            icon={<SendOutlined />}
-          >
-            Отправить
-          </Button>
-        </div>
+      {/* Для преподавателя - только просмотр решения */}
+      {post.type === 'task' && isTeacher && currentSolution && (
+        <Card title={isTeamTask ? "Решение команды" : "Решение студента"} style={{ borderRadius: 12, marginBottom: 24 }}>
+          <div style={{ marginBottom: 12 }}>
+            <Tag color={statusLabels[currentSolution.status]?.color || 'default'}>
+              {statusLabels[currentSolution.status]?.text || currentSolution.status}
+            </Tag>
+            {currentSolution.score != null && (
+              <Tag color="green">
+                {isTeamTask ? `Оценка команды: ${currentSolution.score}/${post.maxScore}` : `Оценка: ${currentSolution.score}/${post.maxScore}`}
+              </Tag>
+            )}
+            <Text type="secondary" style={{ marginLeft: 8 }}>
+              {dayjs(currentSolution.updatedDate).format('DD.MM.YYYY HH:mm')}
+            </Text>
+          </div>
+          
+          {currentSolution.breakdown && <GradeBreakdown breakdown={currentSolution.breakdown} maxScore={post.maxScore} />}
+          
+          {isTeamTask && currentSolution.selfAssessments && (
+            <Collapse style={{ marginBottom: 12 }}>
+              <Panel header="Самооценки участников" key="selfAssessments">
+                {currentSolution.selfAssessments.map((sa) => (
+                  <Card key={sa.userId} size="small" style={{ marginBottom: 8 }}>
+                    <Text strong>{sa.credentials}</Text>
+                    {sa.evaluation && (
+                      <div style={{ marginTop: 8 }}>
+                        {sa.evaluation.weightedValues?.map(wv => (
+                          <div key={wv.criterionId}>Критерий: {wv.score} баллов</div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </Panel>
+            </Collapse>
+          )}
+          
+          {currentSolution.text && <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{currentSolution.text}</Paragraph>}
+          
+          {currentSolution.files?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {currentSolution.files.map((f) => (
+                <a key={f.id} href={filesAPI.getUrl(f.id)} target="_blank" rel="noreferrer">
+                  <Tag icon={<DownloadOutlined />} color="blue">{f.name}</Tag>
+                </a>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
+      {/* Комментарии к посту */}
+      <Card title={<span><MessageOutlined /> Комментарии</span>} style={{ borderRadius: 12 }}>
+        <div style={{ marginBottom: 16 }}>
+          <TextArea rows={2} value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Написать комментарий..." />
+          <Button type="primary" size="small" style={{ marginTop: 8 }} loading={commentLoading} onClick={handleAddComment} icon={<SendOutlined />}>Отправить</Button>
+        </div>
         {comments.length === 0 ? (
-          <Text type="secondary">Пока нет комментариев</Text>
+          <Empty description="Пока нет комментариев" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
-          comments.map((c) => (
-            <CommentItem key={c.id} comment={c} onRefreshParent={fetchComments} />
-          ))
+          comments.map((c) => <CommentItem key={c.id} comment={c} onRefreshParent={fetchComments} />)
         )}
       </Card>
     </div>
