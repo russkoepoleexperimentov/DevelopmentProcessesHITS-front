@@ -20,8 +20,9 @@ import {
   Col,
   Collapse,
   Space,
+  Tooltip,
 } from 'antd';
-import { UploadOutlined, FileOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
+import { UploadOutlined, FileOutlined, SettingOutlined, TeamOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { courseAPI, postAPI, filesAPI } from '../shared/api/endpoints';
 import dayjs from 'dayjs';
 
@@ -45,6 +46,7 @@ export default function PostFormPage() {
   const isEdit = Boolean(postId);
   
   const watchCopyGroups = Form.useWatch('copyGroupsFromPreviousAssignment', form);
+  const watchGradingMode = Form.useWatch('gradingMode', form);
 
   useEffect(() => {
     if (isEdit) {
@@ -74,6 +76,10 @@ export default function PostFormPage() {
             allowStudentTransferCaptain: data.allowStudentTransferCaptain ?? true,
             copyGroupsFromPreviousAssignment: data.copyGroupsFromPreviousAssignment ?? false,
             sourceAssignmentId: data.sourceAssignmentId,
+            // Вес самооценки
+            studentScoreWeight: data.studentScoreWeight ?? 0,
+            gradingMode: data.gradingMode ?? 'TeacherReview',
+            minPeerReviewsRequired: data.minPeerReviewsRequired ?? null,
           });
           setPostType(data.type === TEAM_TASK_TYPE ? 'task' : data.type);
           // Проверяем, командное ли задание
@@ -132,6 +138,12 @@ export default function PostFormPage() {
         body.maxScore = values.maxScore ?? 5;
         body.taskType = values.taskType || 'mandatory';
         body.solvableAfterDeadline = values.solvableAfterDeadline ?? false;
+        
+        body.studentScoreWeight = values.studentScoreWeight ?? 0;
+        body.gradingMode = values.gradingMode ?? 'TeacherReview';
+        if (!isTeamTask && values.gradingMode === 'PeerToPeer') {
+          body.minPeerReviewsRequired = values.minPeerReviewsRequired;
+        }
         
         // Командные поля (только если включен командный режим)
         if (isTeamTask) {
@@ -222,6 +234,8 @@ export default function PostFormPage() {
             captainMode: 'firstMember',
             votingDurationHours: 24,
             copyGroupsFromPreviousAssignment: false,
+            studentScoreWeight: 0,
+            gradingMode: 'TeacherReview',
           }}
         >
           <Form.Item name="type" label="Тип" rules={[{ required: true }]}>
@@ -280,6 +294,29 @@ export default function PostFormPage() {
               >
                 <Switch />
               </Form.Item>
+
+              <Form.Item name="gradingMode" label="Режим оценивания">
+                <Select
+                  size="large"
+                  options={[
+                    { value: 'TeacherReview', label: '👨‍🏫 Преподаватель' },
+                    { value: 'PeerToPeer', label: '👥 P2P (взаимное оценивание)' },
+                  ]}
+                />
+              </Form.Item>
+
+              {!isTeamTask && watchGradingMode === 'PeerToPeer' && (
+                <Form.Item
+                  name="minPeerReviewsRequired"
+                  label="Минимум оцениваний для зачёта"
+                  rules={[
+                    { required: true, message: 'Укажите минимум' },
+                    { type: 'number', min: 1, message: 'Должно быть >= 1' },
+                  ]}
+                >
+                  <InputNumber min={1} style={{ width: '100%' }} placeholder="Например: 2" />
+                </Form.Item>
+              )}
 
               <Divider />
 
@@ -372,6 +409,27 @@ export default function PostFormPage() {
               )}
 
               <Divider />
+
+              {/* Вес самооценки - НОВЫЙ БЛОК */}
+              <Form.Item
+                name="studentScoreWeight"
+                label={
+                  <span>
+                    Вес самооценки (0..1)
+                    <Tooltip title="Если установить 0, студенты не будут видеть форму самооценки и она не будет влиять на итоговую оценку">
+                      <QuestionCircleOutlined style={{ marginLeft: 8, color: '#999' }} />
+                    </Tooltip>
+                  </span>
+                }
+              >
+                <InputNumber
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  style={{ width: '100%' }}
+                  placeholder="0 - самооценка отключена"
+                />
+              </Form.Item>
 
               {/* Критерии оценивания */}
               <Form.Item label="📊 Критерии оценивания">

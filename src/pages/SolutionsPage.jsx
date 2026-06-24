@@ -143,12 +143,11 @@ export default function SolutionsPage() {
     }
   };
 
-  const handleSubmitGrade = async (evaluation, score, status, comment) => {
+  const handleSubmitGrade = async (evaluation, status, comment) => {
     if (!selected) return;
     setReviewLoading(true);
     try {
       await solutionAPI.review(selected.id, {
-        score,
         status,
         comment: comment || '',
         evaluation,
@@ -170,7 +169,6 @@ export default function SolutionsPage() {
     setReviewLoading(true);
     try {
       await solutionAPI.review(selected.id, {
-        score: values.score,
         status: values.status,
         comment: values.comment || '',
       });
@@ -200,6 +198,17 @@ export default function SolutionsPage() {
       setSolCommentLoading(false);
     }
   };
+
+  // Проверяем, проверено ли уже решение
+  const isSolutionChecked = selected?.status === 'checked';
+
+  // В P2P-режиме преподаватель не оценивает вручную
+  const isP2PMode = post?.gradingMode === 'PeerToPeer';
+  
+  // Проверяем, нужно ли показывать самооценку (вес самооценки > 0)
+  const shouldShowSelfAssessment = !isSolutionChecked && 
+    selected?.selfAssessment && 
+    (post?.studentScoreWeight || 0) > 0;
 
   const columns = [
     {
@@ -247,6 +256,11 @@ export default function SolutionsPage() {
   );
 
   if (!post && !loading) return null;
+
+  // Определяем заголовок модального окна
+  const modalTitle = post?.type === 'teaM_TASK' && !isSolutionChecked 
+    ? 'Оценка команды' 
+    : 'Оценка';
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
@@ -302,9 +316,11 @@ export default function SolutionsPage() {
         onClose={() => setDrawerOpen(false)}
         width={520}
         extra={
-          <Button type="primary" onClick={() => setReviewOpen(true)}>
-            Оценить
-          </Button>
+          !isSolutionChecked && !isP2PMode && (
+            <Button type="primary" onClick={() => setReviewOpen(true)}>
+              Оценить
+            </Button>
+          )
         }
       >
         {selected && (
@@ -350,6 +366,30 @@ export default function SolutionsPage() {
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* Самооценка - показываем ТОЛЬКО если:
+                1. Решение НЕ проверено
+                2. Есть данные самооценки
+                3. Вес самооценки в задании > 0 
+            */}
+            {shouldShowSelfAssessment && (
+              <>
+                <Divider />
+                <div>
+                  <Text strong>Самооценка студента:</Text>
+                  <div style={{ marginTop: 8, background: '#f5f5f5', padding: 12, borderRadius: 8 }}>
+                    {selected.selfAssessment.weightedValues?.map((wv, idx) => {
+                      const criterion = gradeFormConfig?.weightedCriteria?.find(c => c.id === wv.criterionId);
+                      return (
+                        <div key={idx}>
+                          {criterion?.title || 'Критерий'}: {wv.score} баллов
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
             )}
 
             <Divider />
@@ -399,26 +439,13 @@ export default function SolutionsPage() {
 
       {/* Простая форма оценки (без критериев) */}
       <Modal
-        title="Оценить решение"
+        title={modalTitle}
         open={reviewOpen && !hasCriteria}
         onCancel={() => setReviewOpen(false)}
         footer={null}
         destroyOnClose
       >
         <Form form={reviewForm} layout="vertical" onFinish={handleReview}>
-          <Form.Item
-            name="score"
-            label={`Оценка (макс. ${post?.maxScore || 5})`}
-            rules={[{ required: true, message: 'Введите оценку' }]}
-          >
-            <InputNumber
-              min={0}
-              max={post?.maxScore || 100}
-              size="large"
-              style={{ width: '100%' }}
-            />
-          </Form.Item>
-
           <Form.Item name="status" label="Статус" rules={[{ required: true }]}>
             <Select
               size="large"
@@ -465,7 +492,7 @@ export default function SolutionsPage() {
 
       {/* Расширенная форма оценки с GradeForm (для заданий с критериями) */}
       <Modal
-        title="Оценить решение"
+        title={modalTitle}
         open={reviewOpen && hasCriteria}
         onCancel={() => setReviewOpen(false)}
         width={750}
