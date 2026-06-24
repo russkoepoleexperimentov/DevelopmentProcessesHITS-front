@@ -203,7 +203,7 @@ export default function SolutionsPage() {
   const isSolutionChecked = selected?.status === 'checked';
 
   // В P2P-режиме преподаватель не оценивает вручную
-  const isP2PMode = post?.gradingMode === 'PeerToPeer';
+  const isP2PMode = post?.gradingMode?.toLowerCase() === 'peertopeer';
   
   // Проверяем, нужно ли показывать самооценку (вес самооценки > 0)
   const shouldShowSelfAssessment = !isSolutionChecked && 

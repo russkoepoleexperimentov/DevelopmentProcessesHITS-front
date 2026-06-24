@@ -78,7 +78,7 @@ export default function PostFormPage() {
             sourceAssignmentId: data.sourceAssignmentId,
             // Вес самооценки
             studentScoreWeight: data.studentScoreWeight ?? 0,
-            gradingMode: data.gradingMode ?? 'TeacherReview',
+            gradingMode: data.gradingMode?.toLowerCase() === 'peertopeer' ? 'PeerToPeer' : 'TeacherReview',
             minPeerReviewsRequired: data.minPeerReviewsRequired ?? null,
           });
           setPostType(data.type === TEAM_TASK_TYPE ? 'task' : data.type);
